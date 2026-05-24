@@ -2,10 +2,11 @@ import Config
 
 # Configure your database
 config :messenger, Messenger.Repo,
-  username: "postgres",
-  password: "postgres",
+  username: "rockstaa",
+  password: "Strike24",
   hostname: "localhost",
-  database: "messenger_dev",
+  port: "5432",
+  database: "messenger_development",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
@@ -90,3 +91,8 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+
+# env
+config :messenger, :telegram,
+       bot_token: System.get_env("TELEGRAM_BOT_TOKEN")

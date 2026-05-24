@@ -63,7 +63,7 @@ defmodule Messenger.MixProject do
       {:gettext, "~> 1.0"},
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
-      {:bandit, "~> 1.5"},
+      {:bandit, "~> 1.11.1"},
       {:finch, "~> 0.16"},
       {:oban, "~> 2.21.0"},
       {:postgrex, "~> 0.22.0"},

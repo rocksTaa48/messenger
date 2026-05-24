@@ -4,11 +4,11 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
     build: {
         outDir: '../../priv/static',
-        emptyOutDir: false,
+        emptyOutDir: true,
         assetsDir: 'svelte_assets',
         manifest: true,
         rollupOptions: {
-            input: './src/main.js'
+            input: './index.html'
         }
     },
 

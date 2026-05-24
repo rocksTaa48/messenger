@@ -55,7 +55,7 @@
 
     function toggleAttachmentMenu() {
         isAttachmentMenuOpen = !isAttachmentMenuOpen;
-        triggerHaptic(); // Мягкий виброотклик при клике
+        triggerHaptic(); // Виброотклик при клике
     }
 
     // Закрываем меню, если пользователь начал вводить текст

@@ -1,0 +1,11 @@
+{
+  "index.html": {
+    "file": "svelte_assets/index-OZv26e5d.js",
+    "name": "index",
+    "src": "index.html",
+    "isEntry": true,
+    "css": [
+      "svelte_assets/index-dHYF7wJp.css"
+    ]
+  }
+}
