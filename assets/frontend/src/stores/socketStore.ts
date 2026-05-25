@@ -40,7 +40,7 @@ export function initSession(initData: string) {
     socket.connect();
 
     // 3) Подключаемся к SessionChannel
-    const channel = socket.channel('session:presence', {});
+    const channel = socket.channel('session:lobby', {}); // Заходим в лобби чатов так как это первая страница
     activeChannel.set(channel);
 
     // Функция входа запускается и при первом старте, и автоматически при переподключениях сокета

@@ -19,26 +19,42 @@ defmodule Messenger.Accounts do
       {:ok, tg_user_map} ->
         # Телеграм возвращает id как число.
         telegram_id = tg_user_map["id"]
-        username = tg_user_map["username"]
+        # Собираем все пришедшие параметры для создания/обновления
+        attrs = %{
+          telegram_id: telegram_id,
+          username: tg_user_map["username"],
+          first_name: tg_user_map["first_name"],
+          last_name: tg_user_map["last_name"],
+          # Сохраняем весь сырой map, полученный от Telegram
+          raw_data: tg_user_map
+        }
 
-        find_or_register_user(telegram_id, username)
+        find_and_sync_user(telegram_id, attrs)
 
       {:error, :invalid_signature} ->
         {:error, :unauthorized}
     end
   end
 
-  # Ищем юзера в базе или создаем со статусом pending
-  defp find_or_register_user(telegram_id, username) do
+  defp find_and_sync_user(telegram_id, attrs) do
     case Repo.get_by(User, telegram_id: telegram_id) do
       %User{} = user ->
-        {:ok, :logged_in, user}
+        # Если пользователь существует, обновляем его attrs
+        case user
+
+             |> User.changeset(attrs)
+             |> Repo.update() do
+          {:ok, updated_user} -> {:ok, :logged_in, updated_user}
+          {:error, changeset} -> {:error, changeset}
+        end
 
       nil ->
-        attrs = %{telegram_id: telegram_id, username: username, role: "pending"}
+        # Если пользователя нет. При первой регистрации жестко задаем роль "pending"
+        registration_attrs = Map.put(attrs, :role, "pending")
 
         case %User{}
-             |> User.changeset(attrs)
+
+             |> User.changeset(registration_attrs)
              |> Repo.insert() do
           {:ok, new_user} -> {:ok, :registered_pending, new_user}
           {:error, changeset} -> {:error, changeset}
