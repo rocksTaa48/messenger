@@ -2,145 +2,237 @@ defmodule MessengerWeb.SessionChannel do
   # Этот модуль является каналом
   use MessengerWeb, :channel
   alias Messenger.Chats
-
+  alias Messenger.AiProfiles
   @doc """
-  Здесь описываются функции подключения и работы с гостинной чатов
+    Это главный джоин, реализацию я определил в один канал, тоетсь в гостинную 'session:lobby' здесь и будут происходить
+    все изменения, движение данных, один канал на все, со временем я реализую 'DELTA' изменения, что бы не отдавать
+    каждый раз ПОЛНЫЙ стейт. Это компромиссное решение в виду моей не охоты управлять лапшой из каналов,
+    которая потом обязательно будет ':chats, :messages, :settings etc' и потом можно будет утонуть в сторах
+    на фронте, а так как я не силен во фронтенде, мне этой лишней работы не нужно.
   """
-  #--------------------------------------------- Подключаемся к гостинной
+
   def join("session:lobby", _payload, socket) do
-
     current_user = socket.assigns.current_user
-    chats = Chats.list_user_chats(current_user.id, 15)
-
-    # Форматируем в чистый JSON-массив
+    chats = Chats.list_user_chats(current_user.id)
     formatted_chats = Enum.map(chats, &format_chat/1)
 
-    # Подписка на обновления
     Phoenix.PubSub.subscribe(Messenger.PubSub, "user:#{current_user.id}:lobby")
-
-    user_data = %{
-      id: current_user.id,
-      telegram_id: current_user.telegram_id,
-      username: current_user.username,
-      first_name: current_user.first_name,
-      role: current_user.role
+    # Собираем единое Дерево Стейта, это то что полетит на фронт, все данные, важно попозже добавить ДЕЛЬТУ
+    # Что бы не слать весь стейт заново, придумать методы отправки только точечных изменений $append $delete $prepend
+    initial_tree_state = %{
+      "current_screen" => "chats",
+      "user" => %{
+        "id" => current_user.id,
+        "telegram_id" => current_user.telegram_id,
+        "username" => current_user.username,
+        "first_name" => current_user.first_name,
+        "last_name" => current_user.first_name,
+        "role" => current_user.role
+      },
+      "chats_list" => formatted_chats,
+      "has_more_chats" => length(formatted_chats) == 15,
+      "active_chat" => nil
+      # "settings" => %{"theme" => "dark", "lang" => "ru"}
     }
 
-    # Отдаем пользователю данные
-    {:ok, %{user: user_data, chats: formatted_chats}, socket}
-  end
-
-  #--------------------------------------------- Отправляем событие "добавить чат в список"
-  def handle_info({:lobby_update, :new_chat, new_chat}, socket) do
-    push(socket, "prepend_chat", format_chat(new_chat))
-    # Увеличиваем счетчик загруженных
-    {:noreply, update_in(socket.assigns.total_loaded, &(&1 + 1))}
-  end
-
-  #--------------------------------------------- Отправляем событие "удалить чат из списка"
-  def handle_info({:lobby_update, :deleted_chat, chat_id}, socket) do
-    push(socket, "remove_chat", %{chat_id: chat_id})
-    # Уменьшаем счетчик
-    {:noreply, update_in(socket.assigns.total_loaded, &(&1 - 1))}
+    # а) Кладем стейт в socket через assign, чтобы Elixir его запомнил.
+    # б) Возвращаем его фронтенду в кортеже {:ok, state, socket}.
+    authorized_socket = assign(socket, :state, initial_tree_state)
+    {:ok, initial_tree_state, authorized_socket}
   end
 
 
 
   @doc """
-  Подключение к конкретному чату
+    Это функция пагинации, при скролинге и долистывании до таргета, с фронта прилетает запрос, после которого мы отдаем
+    еще одну страницу чатов, что убережет нас от подгрузки тысяч чатов за раз, что уронит фронт.
   """
-  def join("session:chat:" <> string_chat_id, _payload, socket) do
-    chat_id = String.to_integer(string_chat_id)
+  def handle_in("load_more_chats", _payload, socket) do
     current_user = socket.assigns.current_user
+    current_chats_list = socket.assigns.state["chats_list"]
 
-    case Messenger.Chats.get_user_chat(chat_id, current_user.id) do
-      %Messenger.Chats.Chat{} ->
-        # Если чат найден и принадлежит юзеру — пускаем его в сокет и отдаем историю
-        history = Messenger.Chats.get_ai_context(chat_id)
-
-        {:ok, %{history: history}, assign(socket, :chat_id, chat_id)}
-
+    case List.last(current_chats_list) do
       nil ->
-        # Если чат чужой или его нет бросаем ошибку
-        {:error, %{reason: "Unauthorized access to this chat"}}
-    end
-  end
+        {:noreply, socket}
 
+      last_chat ->
+        # Достаем таймстемп-курсор
+        cursor = last_chat["cursor_timestamp"]
 
-  @doc """
-  Триггер от фронтенда, пользователь долистал до него
-  """
-  def handle_in("load_more_chats", %{"before_cursor" => before_cursor_str}, socket) do
-    current_user = socket.assigns.current_user
+        # Вызываем твой контекст (limit = 15)
+        next_chats = Chats.list_user_chats(current_user.id, 15, cursor)
+        formatted_next = Enum.map(next_chats, &format_chat/1)
 
-    # Декодируем строку времени обратно в DateTime Elixir
-    {:ok, before_cursor, _} = DateTime.from_iso8601(before_cursor_str)
+        if Enum.empty?(formatted_next) do
+          new_state = Map.put(socket.assigns.state, "has_more_chats", false)
+          push(socket, "sync", new_state)
+          {:reply, :ok, assign(socket, :state, new_state)}
+        else
+          # Склеиваем массивы чатов
+          updated_chats_list = current_chats_list ++ formatted_next
 
-    # Запрашиваем следующую порцию данных из базы
-    next_chats = Chats.list_user_chats(current_user.id, 15, before_cursor)
-    formatted_chats = Enum.map(next_chats, &format_chat/1)
+          new_state = socket.assigns.state
 
-    # Отвечаем фронтенду
-    {:reply, {:ok, %{chats: formatted_chats}}, socket}
-  end
+                      |> Map.put("chats_list", updated_chats_list)
+                      |> Map.put("has_more_chats", length(formatted_next) == 15)
 
-
-
-
-
-
-
-
-
-
-  @doc """
-  Обработка события создания чата с фронтенда.
-  Прилетает только в топик "session:lobby".
-  """
-  def handle_in("create_chat", payload, socket) do
-    current_user = socket.assigns.current_user
-
-    # Собираем атрибуты для создания чата
-    chat_attrs = %{
-      "title" => Map.get(payload, "title", "Новый чат"),
-      "model_name" => Map.get(payload, "model_name"),
-      "ai_profile_id" => Map.get(payload, "ai_profile_id"),
-      "user_id" => current_user.id
-    }
-
-    # Если пользователь передал стартовый системный промпт,
-    # сразу записываем его как первое сообщение с ролью "system",
-    # это довольно удобно, если сразу не задал, то чат будет обычным.
-    case Chats.create_chat(chat_attrs) do
-      {:ok, chat} ->
-        if prompt = Map.get(payload, "system_prompt") do
-          Chats.create_message(%{
-            chat_id: chat.id,
-            role: "system",
-            content: prompt
-          })
+          # Синхронизируем фронтенд
+          push(socket, "sync", new_state)
+          {:reply, :ok, assign(socket, :state, new_state)}
         end
-
-        # Отвечаем фронтенду успехом и возвращаем ID созданного чата
-        {:reply, {:ok, %{chat_id: chat.id, title: chat.title}}, socket}
-
-      {:error, changeset} ->
-        # Если сработал changeset и данные кривые, вываливаемся с ошибкой
-        errors = Ecto.Changeset.traverse_errors(changeset, fn {msg, _} -> msg end)
-        {:reply, {:error, %{errors: errors}}, socket}
     end
   end
 
 
 
+  @doc """
+    Пользователь нажал на кнопку 'Создать чат' метод NEW по рубишному
+  """
+  def handle_in("click:create_new_chat", _payload, socket) do
+    current_user = socket.assigns.current_user
+    ai_profiles = Chats.list_user_ai_profiles(current_user.id)
 
-  # Хелпер для маппинга структуры Ecto в JSON для фронтенда
+    # Оставляем screen - "chats", просто дополняем дерево массивом ai_profiles
+    new_state = socket.assigns.state
+                |> Map.put("ai_profiles", ai_profiles)
+
+    # Синхронизируем. Шторка на фронтенде тут же увидит $appState.ai_profiles и отрендерит список!
+    push(socket, "sync", new_state)
+    {:reply, :ok, assign(socket, :state, new_state)}
+  end
+
+
+  @doc """
+    Пользователь нажал на кнопку 'Submit' метод CREATE по рубишному
+  """
+  def handle_in("click:submit_new_chat", %{"ai_profile_id" => ai_profile_id, "system_prompt" => system_prompt}, socket) do
+    current_user = socket.assigns.current_user
+
+    # Создаем чат через транзакцию в контексте
+    case Chats.create_chat_with_prompt(current_user.id, ai_profile_id, system_prompt) do
+      {:ok, new_chat} ->
+        # 1. Обновляем список чатов на главной странице, чтобы он был актуальным
+        updated_chats = Chats.list_user_chats(current_user.id)
+        formatted_chats = Enum.map(updated_chats, &format_chat/1)
+
+        # 2. Сразу формируем пустую (или с системным промптом) историю сообщений для экрана Messenger
+        initial_messages = if system_prompt && system_prompt != "",
+                              do: [%{"id" => "sys", "text" => system_prompt, "sender" => "system"}],
+                              else: []
+
+        # 3. Переводим юзера прямо внутрь созданного чата
+        new_state = socket.assigns.state
+
+                    |> Map.put("current_screen", "Messenger") # Перекидываем в мессенджер
+                    |> Map.put("chats_list", formatted_chats)
+                    |> Map.put("active_chat", %{
+          "id" => to_string(new_chat.id),
+          "ai_profile_id" => ai_profile_id,
+          "messages" => initial_messages
+        })
+                    |> Map.delete("ai_profiles") # Чистим стейт от ненужного больше списка моделей
+
+        push(socket, "sync", new_state)
+        {:reply, :ok, assign(socket, :state, new_state)}
+
+      {:error, _reason} ->
+        # Если что-то пошло не так, можно прокинуть ошибку, но транзакции с Repo.insert! тут упадут в GenServer шторм,
+        # поэтому для продакшена лучше обработать паттерн-матчинг изменений чистым сhangeset.
+        {:reply, :error, socket}
+    end
+  end
+
+
+
+  def handle_in("click_open_chat", %{"chat_id" => chat_id}, socket) do
+    current_user = socket.assigns.current_user
+
+    messages = Chats.get_messages(chat_id, current_user.id)
+
+    new_state = socket.assigns.state
+
+                |> Map.put("current_screen", "inside_chat")
+                |> Map.put("active_chat", %{
+      "id" => chat_id,
+      "messages" => messages
+    })
+
+    # Шлем обновленный монолит-стейт во фронтенд
+    push(socket, "sync", new_state)
+
+    # Сохраняем обновленное состояние в процессе сокета
+    {:reply, :ok, assign(socket, :state, new_state)}
+  end
+
+
+
+  @doc """
+  Юзер при подключении уже подписался на свой PubSub: user:current_user.id:lobby
+  Когда в систему прилетает событие, например: новое сообщение от агента или системное уведомление,
+  Phoenix может вызвать handle_info/2
+  """
+  def handle_info({:new_message, incoming_msg}, socket) do
+    current_state = socket.assigns.state
+
+    # Проверяем: если у пользователя сейчас открыт именно ТОТ чат, куда пришло сообщение
+    new_state = if current_state["current_screen"] == "Messenger" and
+                   current_state["active_chat"]["id"] == incoming_msg.chat_id do
+
+      # Дописываем новое сообщение прямо в массив открытого чата
+      updated_messages = current_state["active_chat"]["messages"] ++ [incoming_msg]
+      put_in(current_state, ["active_chat", "messages"], updated_messages)
+    else
+
+      # Если юзер на другом экране, просто инкрементим счетчик в списке чатов или ничего не делаем
+      updated_chats = Enum.map(current_state["chats_list"], fn chat ->
+        if chat["id"] == incoming_msg.chat_id, do: Map.put(chat, "unread", chat["unread"] + 1), else: chat
+      end)
+      put_in(current_state, ["chats_list"], updated_chats)
+    end
+
+    # Шлем обновленное дерево на фронтенд
+    push(socket, "sync", new_state)
+
+    # Сохраняем новое состояние в процессе сокета
+    {:noreply, assign(socket, :state, new_state)}
+  end
+
+
+
+  @doc """
+    Это 'Helper' помощник для определения строк которые мы отдаем показывая чат на фронтенде
+  """
   defp format_chat(chat) do
     %{
-      id: chat.id,
-      title: chat.title,
-      model_name: chat.model_name,
-      inserted_at: DateTime.to_iso8601(chat.inserted_at)
+      "id" => to_string(chat.id),
+      "title" => chat.title || "Без названия",
+      "body" => "Нет сообщений",
+      "model" => chat.model_name || "Нет модели",
+      "cursor_timestamp" => DateTime.to_iso8601(chat.inserted_at)
+
+      # "status" => if(chat.has_unread, do: "unread", else: "read"),
+      # "unread_count" => chat.unread_count || 0,
+      # Строковые алиасы для фронтенда, чтобы не тащить JS-классы через JSON
+      # "icon_type" => chat.bot_type || "default", # "bot", "image", "sparkles"
+      # "icon_color" => chat.ui_color || "text-[#2481cc] bg-[#2481cc]/10"
+    }
+  end
+
+  @doc """
+    Это 'Helper' помощник для определения строк которые мы отдаем показывая ИИ профиль на фронтенде
+  """
+  defp format_ai_profile(ai_profile) do
+    %{
+      "id" => to_string(ai_profile.id),
+      "provider" => ai_profile.provider || "Без названия",
+      "body" => "Нет сообщений",
+      "timestamp" => DateTime.to_iso8601(ai_profile.inserted_at)
+
+      # "status" => if(chat.has_unread, do: "unread", else: "read"),
+      # "unread_count" => chat.unread_count || 0,
+      # Строковые алиасы для фронтенда, чтобы не тащить JS-классы через JSON
+      # "icon_type" => chat.bot_type || "default", # "bot", "image", "sparkles"
+      # "icon_color" => chat.ui_color || "text-[#2481cc] bg-[#2481cc]/10"
     }
   end
 

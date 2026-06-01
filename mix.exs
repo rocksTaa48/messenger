@@ -21,7 +21,7 @@ defmodule Messenger.MixProject do
   def application do
     [
       mod: {Messenger.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools, :cloak_ecto]
     ]
   end
 
@@ -68,7 +68,8 @@ defmodule Messenger.MixProject do
       {:oban, "~> 2.21.0"},
       {:postgrex, "~> 0.22.0"},
       {:ecto_sql, "~> 3.13.5"},
-      {:bcrypt_elixir, "~> 3.0"}
+      {:bcrypt_elixir, "~> 3.0"},
+      {:cloak_ecto, "~> 1.3"},
     ]
   end
 

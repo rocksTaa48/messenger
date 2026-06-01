@@ -72,4 +72,17 @@ defmodule Messenger.Chats do
 
     Repo.all(query)
   end
+
+
+  @doc"""
+  Функция отдает список доступных для конкретного пользователя моделей ИИ (AI_PROFILES)
+  """
+  def list_user_ai_profiles(user_id) do
+    [
+      %{"id" => "gpt_4o", "name" => "ChatGPT 4o", "icon" => "openai", "color" => "text-emerald-400"},
+      %{"id" => "claude_3b", "name" => "Claudecode", "icon" => "claude", "color" => "text-emerald-400"},
+      %{"id" => "deepseek_v3", "name" => "DeepSeek V3", "icon" => "deepseek", "color" => "text-blue-400"},
+      %{"id" => "qwen_2_5", "name" => "Qwen 2.5 (Alibaba)", "icon" => "qween", "color" => "text-purple-400"}
+    ]
+  end
 end

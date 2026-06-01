@@ -1,59 +1,56 @@
 <script lang="ts">
+    // Иморты
     import { Search, X, FolderPlus, MessageSquare, Bot, ImageIcon, Sparkles, Plus  } from 'lucide-svelte';
     import AddCategoryModal from './AddCategoryModal.svelte';
     import { createEventDispatcher } from 'svelte';
-    const dispatch = createEventDispatcher<{ selectChat: any }>();
-
+    import { appState } from '../../stores/socketStore';
+    import Chat from "./partials/Chat.svelte";
+    import AddChatModal from "./AddChatModal.svelte";
     import WebApp from "@twa-dev/sdk";
 
-    let chats = [
-        {
-            id: '1',
-            theme: 'ChatGPT Assistant',
-            body: 'Конечно! Я могу помочь вам спроектировать базу данных для Elixir...',
-            status: 'unread',
-            time: '14:28',
-            unreadCount: 3,
-            icon: Bot,
-            iconColor: 'text-[#2481cc] bg-[#2481cc]/10'
-        },
-        {
-            id: '2',
-            theme: 'DALL-E 3 Generator',
-            body: 'Изображение "Гусь в космосе с рогами" успешно сгенерировано',
-            status: 'read',
-            time: 'Вчера',
-            unreadCount: 0,
-            icon: ImageIcon,
-            iconColor: 'text-purple-400 bg-purple-500/10'
-        },
-        {
-            id: '3',
-            theme: 'Бот-Почтальон Новости',
-            body: 'Обновление системы: Добавлена поддержка горизонтальных вкладок',
-            status: 'read',
-            time: '2 мая',
-            unreadCount: 0,
-            icon: Sparkles,
-            iconColor: 'text-[#d9ff00] bg-[#d9ff00]/10'
-        },
-        {
-            id: '4',
-            theme: 'Общий Чат (Тест)',
-            body: 'Привет! Бот работает просто отлично, задержек вообще нет',
-            status: 'read',
-            time: '18.04',
-            unreadCount: 0,
-            icon: MessageSquare,
-            iconColor: 'text-gray-400 bg-white/5'
-        }
-    ];
+    // Константы
+    const dispatch = createEventDispatcher<{ selectChat: any }>();
 
-
+    // Функция отклика (Вибро на iPhone)
     function handleMenuClick() {
         if (WebApp.HapticFeedback) WebApp.HapticFeedback.impactOccurred('light');
         console.log('Menu clicked');
     }
+
+    // Функция открытия модалки нового чата
+    let isNewChatModalOpen = false;
+    function openCreateModal() {
+        isNewChatModalOpen = true;
+        appState.send("click:create_new_chat");
+    }
+
+
+    // Функция, которая следит за прокруткой контейнера
+    let isLoadingMore = false;
+    function handleScroll(e: Event) {
+        const target = e.target as HTMLElement;
+
+        // Считаем расстояние до дна (минус 60 пикселей буфера, чтобы подгрузка шла бесшовно)
+        const isBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 60;
+
+        // Если дошли до дна, сервер говорит, что чаты еще есть, и мы сейчас не в процессе загрузки
+        if (isBottom && $appState.has_more_chats && !isLoadingMore) {
+            isLoadingMore = true;
+
+            // Отправляем сигнал на бэкенд
+            appState.send("load_more_chats");
+        }
+    }
+
+    // Как только стор обновился (прилетели новые чаты), снимаем блокировку загрузки
+    $: if ($appState?.chats_list) {
+        isLoadingMore = false;
+    }
+
+
+
+
+
 
     // Логика переключения верхних категорий диалогов
     let activeCategory = 'All';
@@ -166,67 +163,38 @@
         </div>
     </div>
 
-    <!-- СКРОЛЛ ЧАТОВ -->
-    <div class="flex-1 overflow-y-auto pb-24 scrollbar-none space-y-2 px-2">
+    <div   on:scroll={handleScroll}
+           class="flex-1 overflow-y-auto pb-24 scrollbar-none space-y-2 px-2 w-full"
+    >
 
-
-        <!-- КНОПКА НОВОГО ЧАТА (всегда прижата к верху списка?пока) -->
-        <button
+        <button on:click={() => openCreateModal()}
                 class="w-full flex items-center justify-center gap-3 text-gray-400 hover:text-[#2481cc] hover:bg-white/[0.05]
-                     transition-all border border-dashed border-white/10 py-4
-                     active:scale-95 bg-white/[0.02] rounded-[24px] font-semibold text-sm mb-4"
+           transition-all border border-dashed border-white/10 py-4
+           active:scale-95 bg-white/[0.02] rounded-[24px] font-semibold text-sm mb-4"
         >
             <span>New Chat</span>
             <Plus size={18} strokeWidth={2.5} />
         </button>
 
-        {#each chats as chat (chat.id)}
-            <div         on:click={() => dispatch('selectChat', chat)}
-                         class="flex items-center gap-4 p-3.5 bg-white/[0.03] border border-white/5
-                         rounded-[24px] hover:bg-white/[0.06] cursor-pointer transition-all active:scale-[0.99]"
-            >
-
-                <!-- Иконка чата (Аватарка) -->
-                <div class="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 {chat.iconColor}">
-                    <svelte:component this={chat.icon} size={24} />
+        <!-- Рендерим живой список из сокета Elixir -->
+        {#if $appState && $appState.chats_list}
+            {#each $appState.chats_list as chat (chat.id)}
+                <!-- Обязательно передаем проп чата внутрь компонента -->
+                <Chat {chat} />
+            {/each}
+            <!-- Красивый индикатор догрузки внизу списка -->
+            {#if isLoadingMore}
+                <div class="w-full text-center py-4 text-xs text-slate-500 animate-pulse">
+                    Подгружаем старые переписки...
                 </div>
-
-                <!-- Текстовый блок (Название и последнее сообщение) -->
-                <div class="flex-1 min-w-0">
-                    <div class="flex justify-between items-baseline mb-1">
-                        <h3 class="text-sm font-bold text-white truncate pr-2">
-                            {chat.theme}
-                        </h3>
-                        <span class="text-[10px] text-gray-500 font-medium whitespace-nowrap">
-                        {chat.time}
-                    </span>
-                    </div>
-                    <p class="text-xs text-gray-400 truncate pr-4">
-                        {chat.body}
-                    </p>
-                </div>
-
-                <!-- Правый блок: Статус и счетчик непрочитанных -->
-                <div class="flex flex-col items-end justify-center flex-shrink-0 min-w-[20px]">
-                    {#if chat.status === 'unread' && chat.unreadCount > 0}
-                    <span class="bg-[#2481cc] text-white text-[10px] font-bold rounded-full h-4.5 min-w-[18px] flex items-center justify-center px-1 animate-pulse">
-                        {chat.unreadCount}
-                    </span>
-                    {:else if chat.status === 'read'}
-                        <!-- Иконка двойной галочки, если прочитано -->
-                        <span class="text-[#2481cc] opacity-80">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7M5 13l4 4L19 7" />
-                        </svg>
-                    </span>
-                    {/if}
-                </div>
-
-            </div>
-        {/each}
+            {/if}
+        {:else}
+            <p class="text-center text-xs text-slate-500 animate-pulse">Диалогов больше нет...</p>
+        {/if}
     </div>
 
     <AddCategoryModal bind:isOpen={isModalOpen} on:add={handleAddCategory} />
+    <AddChatModal bind:isOpen={isNewChatModalOpen} />
 </div>
 
 <style>

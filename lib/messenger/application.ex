@@ -6,6 +6,7 @@ defmodule Messenger.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      Messenger.Vault,
       MessengerWeb.Telemetry,
       Messenger.Repo,
       {DNSCluster, query: Application.get_env(:messenger, :dns_cluster_query) || :ignore},

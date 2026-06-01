@@ -1,34 +1,18 @@
 import Config
 
-# Configure your database
 config :messenger, Messenger.Repo,
-  username: "rockstaa",
-  password: "Strike24",
-  hostname: "localhost",
-  port: "5432",
-  database: "messenger_development",
-  stacktrace: true,
-  show_sensitive_data_on_connection_error: true,
-  pool_size: 10
+       database: "messenger_development",
+       stacktrace: true,
+       show_sensitive_data_on_connection_error: true
 
-# For development, we disable any cache and enable
-# debugging and code reloading.
-#
-# The watchers configuration can be used to run external
-# watchers to your application. For example, we can use it
-# to bundle .js and .css sources.
 config :messenger, MessengerWeb.Endpoint,
-  # Binding to loopback ipv4 address prevents access from other machines.
-  # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
-  http: [ip: {127, 0, 0, 1}],
-  check_origin: false,
-  code_reloader: true,
-  debug_errors: true,
-  secret_key_base: "fN4G2+Us0kdEn5tk/MAjIR2ewuebaXYdbwjRGc0J70Ky1YnR0PFEyAK43DvNC5z5",
-  watchers: [
-    esbuild: {Esbuild, :install_and_run, [:messenger, ~w(--sourcemap=inline --watch)]},
-    tailwind: {Tailwind, :install_and_run, [:messenger, ~w(--watch)]}
-  ]
+       check_origin: false,
+       code_reloader: true,
+       debug_errors: true,
+       watchers: [
+         esbuild: {Esbuild, :install_and_run, [:messenger, ~w(--sourcemap=inline --watch)]},
+         tailwind: {Tailwind, :install_and_run, [:messenger, ~w(--watch)]}
+       ]
 
 # ## SSL Support
 #
@@ -91,8 +75,3 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
-
-
-# env
-config :messenger, :telegram,
-       bot_token: System.get_env("TELEGRAM_BOT_TOKEN")
