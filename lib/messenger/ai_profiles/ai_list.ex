@@ -5,7 +5,7 @@ defmodule Messenger.AiProfiles.AiList do
     "anthropic" => ~w(claude-3-7-sonnet-latest claude-3-5-haiku-latest claude-3-opus-latest),
     "gemini" => ~w(gemini-3.5-pro gemini-2.5-flash gemini-2.5-flash-lite),
     "mistral" => ~w(mistral-large-latest mistral-medium-3.5 mistral-small-4),
-    "qwen" => ~w(qwen3.6-plus qwen3-coder-plus qwen3-max)
+    "qween" => ~w(qwen3.6-plus qwen3-coder-plus qwen3-max)
   }
 
   def providers, do: Map.keys(@providers_and_models)

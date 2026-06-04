@@ -3,18 +3,19 @@ defmodule MessengerWeb.SessionChannel do
   use MessengerWeb, :channel
   alias Messenger.Chats
   alias Messenger.AiProfiles
-  @doc """
-    Это главный джоин, реализацию я определил в один канал, тоетсь в гостинную 'session:lobby' здесь и будут происходить
-    все изменения, движение данных, один канал на все, со временем я реализую 'DELTA' изменения, что бы не отдавать
-    каждый раз ПОЛНЫЙ стейт. Это компромиссное решение в виду моей не охоты управлять лапшой из каналов,
-    которая потом обязательно будет ':chats, :messages, :settings etc' и потом можно будет утонуть в сторах
-    на фронте, а так как я не силен во фронтенде, мне этой лишней работы не нужно.
-  """
+  alias Messenger.Serializer # Сериализатор для того что бы опредилить что отдавать в JASON
 
+  @doc """
+  Это главный джоин, реализацию я определил в один канал, тоетсь в гостинную 'session:lobby' здесь и будут происходить
+  все изменения, движение данных, один канал на все, со временем я реализую 'DELTA' изменения, что бы не отдавать
+  каждый раз ПОЛНЫЙ стейт. Это компромиссное решение в виду моей не охоты управлять лапшой из каналов,
+  которая потом обязательно будет ':chats, :messages, :settings etc' и потом можно будет утонуть в сторах
+  на фронте, а так как я не силен во фронтенде, мне этой лишней работы не нужно.
+  """
   def join("session:lobby", _payload, socket) do
     current_user = socket.assigns.current_user
     chats = Chats.list_user_chats(current_user.id)
-    formatted_chats = Enum.map(chats, &format_chat/1)
+    formatted_chats = Enum.map(chats, &Serializer.chat_serialize/1)
 
     Phoenix.PubSub.subscribe(Messenger.PubSub, "user:#{current_user.id}:lobby")
     # Собираем единое Дерево Стейта, это то что полетит на фронт, все данные, важно попозже добавить ДЕЛЬТУ
@@ -44,8 +45,8 @@ defmodule MessengerWeb.SessionChannel do
 
 
   @doc """
-    Это функция пагинации, при скролинге и долистывании до таргета, с фронта прилетает запрос, после которого мы отдаем
-    еще одну страницу чатов, что убережет нас от подгрузки тысяч чатов за раз, что уронит фронт.
+  Это функция пагинации, при скролинге и долистывании до таргета, с фронта прилетает запрос, после которого мы отдаем
+  еще одну страницу чатов, что убережет нас от подгрузки тысяч чатов за раз, что уронит фронт.
   """
   def handle_in("load_more_chats", _payload, socket) do
     current_user = socket.assigns.current_user
@@ -61,7 +62,7 @@ defmodule MessengerWeb.SessionChannel do
 
         # Вызываем твой контекст (limit = 15)
         next_chats = Chats.list_user_chats(current_user.id, 15, cursor)
-        formatted_next = Enum.map(next_chats, &format_chat/1)
+        formatted_next = Enum.map(next_chats, &Serializer.chat_serialize/1)
 
         if Enum.empty?(formatted_next) do
           new_state = Map.put(socket.assigns.state, "has_more_chats", false)
@@ -86,15 +87,16 @@ defmodule MessengerWeb.SessionChannel do
 
 
   @doc """
-    Пользователь нажал на кнопку 'Создать чат' метод NEW по рубишному
+  Пользователь нажал на кнопку 'Создать чат' метод NEW по рубишному
   """
   def handle_in("click:create_new_chat", _payload, socket) do
     current_user = socket.assigns.current_user
-    ai_profiles = Chats.list_user_ai_profiles(current_user.id)
+    ai_profiles = AiProfiles.list_user_ai_profiles(current_user.id)
+    formated_profile = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
 
     # Оставляем screen - "chats", просто дополняем дерево массивом ai_profiles
     new_state = socket.assigns.state
-                |> Map.put("ai_profiles", ai_profiles)
+                |> Map.put("ai_profiles", formated_profile)
 
     # Синхронизируем. Шторка на фронтенде тут же увидит $appState.ai_profiles и отрендерит список!
     push(socket, "sync", new_state)
@@ -102,59 +104,114 @@ defmodule MessengerWeb.SessionChannel do
   end
 
 
+
   @doc """
-    Пользователь нажал на кнопку 'Submit' метод CREATE по рубишному
+  Пользователь нажал на кнопку 'Submit' метод CREATE по рубишному
   """
   def handle_in("click:submit_new_chat", %{"ai_profile_id" => ai_profile_id, "system_prompt" => system_prompt}, socket) do
     current_user = socket.assigns.current_user
 
-    # Создаем чат через транзакцию в контексте
-    case Chats.create_chat_with_prompt(current_user.id, ai_profile_id, system_prompt) do
-      {:ok, new_chat} ->
-        # 1. Обновляем список чатов на главной странице, чтобы он был актуальным
-        updated_chats = Chats.list_user_chats(current_user.id)
-        formatted_chats = Enum.map(updated_chats, &format_chat/1)
+    final_prompt =
+      case String.trim(system_prompt) do
+        "" -> "Ты опытный и вежливый персональный помощник."
+        valid_prompt -> valid_prompt
+      end
 
-        # 2. Сразу формируем пустую (или с системным промптом) историю сообщений для экрана Messenger
-        initial_messages = if system_prompt && system_prompt != "",
-                              do: [%{"id" => "sys", "text" => system_prompt, "sender" => "system"}],
-                              else: []
+    # Достаем профиль агента из БД, чтобы узнать имя его модели (gpt-4o, claude и т.д.)
+    case AiProfiles.get_ai_profile(ai_profile_id) do
+      nil ->
+        {:reply, {:error, %{reason: "profile_not_found"}}, socket}
 
-        # 3. Переводим юзера прямо внутрь созданного чата
-        new_state = socket.assigns.state
+      profile ->
+        generated_title =
+          if String.length(final_prompt) > 35 do
+            String.slice(final_prompt, 0, 35) <> "..."
+          else
+            final_prompt
+          end
 
-                    |> Map.put("current_screen", "Messenger") # Перекидываем в мессенджер
-                    |> Map.put("chats_list", formatted_chats)
-                    |> Map.put("active_chat", %{
-          "id" => to_string(new_chat.id),
-          "ai_profile_id" => ai_profile_id,
-          "messages" => initial_messages
-        })
-                    |> Map.delete("ai_profiles") # Чистим стейт от ненужного больше списка моделей
+        # Передаем в контекст все необходимые поля
+        db_result = Chats.create_chat_with_prompt(
+          current_user.id,
+          profile.id,
+          profile.model,
+          generated_title,
+          final_prompt
+        )
 
-        push(socket, "sync", new_state)
-        {:reply, :ok, assign(socket, :state, new_state)}
+        case db_result do
+          {:ok, %{chat: new_chat, system_message: system_message}} ->
+            updated_chats = Chats.list_user_chats(current_user.id)
+            formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
 
-      {:error, _reason} ->
-        # Если что-то пошло не так, можно прокинуть ошибку, но транзакции с Repo.insert! тут упадут в GenServer шторм,
-        # поэтому для продакшена лучше обработать паттерн-матчинг изменений чистым сhangeset.
-        {:reply, :error, socket}
+            new_state =
+              socket.assigns.state
+
+              |> Map.put("current_screen", "Messenger")
+              |> Map.put("chats_list", formatted_chats)
+              |> Map.put("active_chat", %{
+                "id" => to_string(new_chat.id),
+                "ai_profile_id" => to_string(profile.id),
+              })
+              |> Map.delete("ai_profiles")
+
+            push(socket, "sync", new_state)
+            {:reply, :ok, assign(socket, :state, new_state)}
+
+          {:error, _step, _changeset, _changes} ->
+            {:reply, {:error, %{reason: "database_error"}}, socket}
+        end
     end
   end
 
 
 
+  # Юзер нажал кнопку "Назад" из практически любого экрана, чтобы вернуться к списку чатов
+  def handle_in("nav_chats", _payload, socket) do
+    # Подгружаем свежий список чатов из базы для экрана 'chats'
+    updated_chats = Chats.list_user_chats(socket.assigns.current_user.id)
+    formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
+
+    # Меняем экран в стейте на 'chats'
+    new_state =
+      socket.assigns.state
+
+      |> Map.put("current_screen", "chats")
+      |> Map.put("chats_list", formatted_chats)
+      |> Map.delete("active_chat") # Уходим из чата — чистим память от тяжелых сообщений
+
+    push(socket, "sync", new_state)
+    {:reply, :ok, assign(socket, :state, new_state)}
+  end
+
+  # Если на фронте будут кнопки для перехода на экраны настроек или агентов:
+  def handle_in("nav_agents", _payload, socket) do
+    # ... логика подгрузки ai_profiles ...
+    new_state = Map.put(socket.assigns.state, "current_screen", "Agents")
+    push(socket, "sync", new_state)
+    {:reply, :ok, assign(socket, :state, new_state)}
+  end
+
+
+  @doc"""
+  Функция 'click_open_chat' открывает чат и показывает нам его содержимое
+  """
   def handle_in("click_open_chat", %{"chat_id" => chat_id}, socket) do
     current_user = socket.assigns.current_user
 
-    messages = Chats.get_messages(chat_id, current_user.id)
+    messages = Chats.get_chat_messages(chat_id, current_user.id)
+    serialized_messages =
+      case messages do
+        {:error, _} -> []
+        msgs -> Enum.map(msgs, &Serializer.message_serialize/1)
+      end
 
     new_state = socket.assigns.state
 
-                |> Map.put("current_screen", "inside_chat")
+                |> Map.put("current_screen", "Messenger")
                 |> Map.put("active_chat", %{
       "id" => chat_id,
-      "messages" => messages
+      "messages_list" => serialized_messages
     })
 
     # Шлем обновленный монолит-стейт во фронтенд
@@ -195,45 +252,6 @@ defmodule MessengerWeb.SessionChannel do
 
     # Сохраняем новое состояние в процессе сокета
     {:noreply, assign(socket, :state, new_state)}
-  end
-
-
-
-  @doc """
-    Это 'Helper' помощник для определения строк которые мы отдаем показывая чат на фронтенде
-  """
-  defp format_chat(chat) do
-    %{
-      "id" => to_string(chat.id),
-      "title" => chat.title || "Без названия",
-      "body" => "Нет сообщений",
-      "model" => chat.model_name || "Нет модели",
-      "cursor_timestamp" => DateTime.to_iso8601(chat.inserted_at)
-
-      # "status" => if(chat.has_unread, do: "unread", else: "read"),
-      # "unread_count" => chat.unread_count || 0,
-      # Строковые алиасы для фронтенда, чтобы не тащить JS-классы через JSON
-      # "icon_type" => chat.bot_type || "default", # "bot", "image", "sparkles"
-      # "icon_color" => chat.ui_color || "text-[#2481cc] bg-[#2481cc]/10"
-    }
-  end
-
-  @doc """
-    Это 'Helper' помощник для определения строк которые мы отдаем показывая ИИ профиль на фронтенде
-  """
-  defp format_ai_profile(ai_profile) do
-    %{
-      "id" => to_string(ai_profile.id),
-      "provider" => ai_profile.provider || "Без названия",
-      "body" => "Нет сообщений",
-      "timestamp" => DateTime.to_iso8601(ai_profile.inserted_at)
-
-      # "status" => if(chat.has_unread, do: "unread", else: "read"),
-      # "unread_count" => chat.unread_count || 0,
-      # Строковые алиасы для фронтенда, чтобы не тащить JS-классы через JSON
-      # "icon_type" => chat.bot_type || "default", # "bot", "image", "sparkles"
-      # "icon_color" => chat.ui_color || "text-[#2481cc] bg-[#2481cc]/10"
-    }
   end
 
 end

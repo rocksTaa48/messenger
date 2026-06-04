@@ -30,9 +30,9 @@
     const targetTab = e.detail; // 'Chats', 'Agents', 'Settings'
 
     // Переводим название вкладки в экшен для бэкенда
-    if (targetTab === 'Chats') appState.send("ui_nav_chats");
-    if (targetTab === 'Agents') appState.send("ui_nav_agents");
-    if (targetTab === 'Settings') appState.send("ui_nav_settings");
+    if (targetTab === 'Chats') appState.send("nav_chats");
+    if (targetTab === 'Agents') appState.send("nav_agents");
+    if (targetTab === 'Settings') appState.send("nav_settings");
   }
 </script>
 
@@ -70,17 +70,17 @@
       <!-- Внутри конкретного диалога (Messenger) -->
       {#if $appState.current_screen === 'Messenger'}
         <!-- По кнопке " < " Назад - шлем команду бэкенду вернуться к списку чатов -->
-        <Messenger on:back={() => appState.send("ui_nav_chats")} />
+        <Messenger on:back={() => appState.send("nav_chats")} />
       {/if}
 
       <!-- Агенты -->
       {#if $appState.current_screen === 'Agents'}
-        <Agents on:back={() => appState.send("ui_nav_chats")} />
+        <Agents on:back={() => appState.send("nav_chats")} />
       {/if}
 
       <!-- Настройки -->
       {#if $appState.current_screen === 'settings'}
-        <Settings on:back={() => appState.send("ui_nav_chats")} />
+        <Settings on:back={() => appState.send("nav_chats")} />
       {/if}
 
     </div>

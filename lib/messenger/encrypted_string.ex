@@ -1,4 +1,7 @@
 defmodule Messenger.EncryptedString do
+  @moduledoc"""
+  Собственно обертка над Cloac_Encrypt что бы не вызывать '__MODULE__' внутри самого себея
+  """
   use Cloak.Ecto.Type,
       vault: Messenger.Vault,
       type: :string
