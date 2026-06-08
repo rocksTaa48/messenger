@@ -1,7 +1,4 @@
 defmodule Messenger.Serializer do
-  alias Messenger.Chats.Message
-  alias Messenger.Chats.Chat
-  alias Messenger.AiProfiles.AiProfile
 
   # Сериализуем сообщение
   def message_serialize(message) do
@@ -10,6 +7,15 @@ defmodule Messenger.Serializer do
       "text" => message.content,
       "role" => if(message.role == "user", do: "me", else: "other"),
       "created_at" => DateTime.to_iso8601(message.inserted_at)
+    }
+  end
+
+  # Сериализуем группу чатов
+  def group_serialize(group) do
+    %{
+      "id" => to_string(group.id),
+      "title" => group.title,
+      "created_at" => DateTime.to_iso8601(group.inserted_at)
     }
   end
 

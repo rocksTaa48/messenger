@@ -10,6 +10,7 @@ export interface AppState {
     current_screen: 'chats' | 'settings' | 'inside_chat';
     user: { id: number; username: string; balance: number } | null;
     chats_list: Array<{ id: string; title: string; unread: number }>;
+    groups: Array<{ id: string; title: string }>;
     active_chat: { id: string; messages: Array<{ id: number; text: string; sender: string }> } | null;
     settings: { theme: string; lang: string };
 }
@@ -20,6 +21,7 @@ const initialValue: AppState = {
     current_screen: 'chats',
     user: null,
     chats_list: [],
+    groups: [],
     active_chat: null,
     settings: { theme: 'dark', lang: 'ru' }
 };

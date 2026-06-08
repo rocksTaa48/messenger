@@ -94,7 +94,7 @@
     <!-- ШАПКА ЧАТА -->
     <header class="h-14 bg-white/[0.02] backdrop-blur-xl border-b border-white/5 flex items-center px-4 justify-between flex-shrink-0 z-10">
         <!-- Клик шлет ивент навигации назад на бэкенд, как мы настроили ранее -->
-        <button on:click={() => appState.send("nav_chats")} class="text-[#2481cc] hover:opacity-80 transition-all p-1 -ml-1 flex items-center justify-center">
+        <button on:click={() => appState.send("base:click_nav_chats")} class="text-[#2481cc] hover:opacity-80 transition-all p-1 -ml-1 flex items-center justify-center">
             <ChevronLeft size={24} strokeWidth={2.5} />
         </button>
 

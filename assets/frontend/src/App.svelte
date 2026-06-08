@@ -30,9 +30,9 @@
     const targetTab = e.detail; // 'Chats', 'Agents', 'Settings'
 
     // Переводим название вкладки в экшен для бэкенда
-    if (targetTab === 'Chats') appState.send("nav_chats");
-    if (targetTab === 'Agents') appState.send("nav_agents");
-    if (targetTab === 'Settings') appState.send("nav_settings");
+    if (targetTab === 'Chats') appState.send("base:click_nav_chats");
+    if (targetTab === 'Agents') appState.send("base:nav_agents");
+    if (targetTab === 'Settings') appState.send("base:nav_settings");
   }
 </script>
 
@@ -43,7 +43,7 @@
   {#if !$appState || $appState.status === 'connecting'}
     <div class="flex flex-col items-center gap-3">
       <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-500"></div>
-      <p class="text-slate-400 animate-pulse">Соединение с экосистемой... Проверяем сеть...</p>
+      <p class="text-slate-400 animate-pulse">Connecting... Проверяем сеть...</p>
     </div>
 
     <!-- Сценарий 2: Ошибка (сервер сделал reject в connect/3) -->
@@ -64,29 +64,29 @@
       <!-- Список чатов -->
       {#if $appState.current_screen === 'chats'}
         <!-- Компонент чатов забирает данные прямо из стора, при клике на чат мы шлем событие на сервер -->
-        <Chats on:selectChat={(e) => appState.send("click_open_chat", { chat_id: e.detail })} />
+        <Chats on:selectChat={(e) => appState.send("chat:click_open_chat", { chat_id: e.detail })} />
       {/if}
 
       <!-- Внутри конкретного диалога (Messenger) -->
       {#if $appState.current_screen === 'Messenger'}
         <!-- По кнопке " < " Назад - шлем команду бэкенду вернуться к списку чатов -->
-        <Messenger on:back={() => appState.send("nav_chats")} />
+        <Messenger on:back={() => appState.send("base:click_nav_chats")} />
       {/if}
 
       <!-- Агенты -->
       {#if $appState.current_screen === 'Agents'}
-        <Agents on:back={() => appState.send("nav_chats")} />
+        <Agents on:back={() => appState.send("base:click_nav_chats")} />
       {/if}
 
       <!-- Настройки -->
       {#if $appState.current_screen === 'settings'}
-        <Settings on:back={() => appState.send("nav_chats")} />
+        <Settings on:back={() => appState.send("base:click_nav_chats")} />
       {/if}
 
     </div>
 
     <!-- Наш Футер. Передаем ему текущий экран (чтобы подсветить нужную иконку) и слушаем клики -->
-    <!-- Так как в футере у тебя вкладки называются с большой буквы, подгоняем под твой Footer.svelte интерфейс -->
+    <!-- В футере вкладки называются с большой буквы, подгоняем интерфейс -->
     <Footer
             activeTab={$appState.current_screen === 'settings' ? 'Settings' : $appState.current_screen === 'chats' ? 'Chats' : $appState.current_screen}
             on:change={handleTabChange}

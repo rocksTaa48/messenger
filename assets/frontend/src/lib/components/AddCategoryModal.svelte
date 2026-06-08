@@ -2,22 +2,26 @@
     import { fly, fade } from 'svelte/transition';
     import { X, PlusCircle } from 'lucide-svelte';
     import { createEventDispatcher } from 'svelte';
+    import {appState} from "../../stores/socketStore";
 
     export let isOpen = false;
 
-    let newCategoryName = "";
+    let newGroupName = ''; // Имя группы (надо ограничить 30 символами)
+
     const dispatch = createEventDispatcher<{ add: string }>();
 
     function close() {
         isOpen = false;
-        newCategoryName = "";
+        newGroupName = "";
     }
 
     function handleSubmit() {
-        const trimmedName = newCategoryName.trim();
-        if (!trimmedName) return;
+        if (!newGroupName) return;
 
-        dispatch('add', trimmedName);
+        appState.send("chat:click_submit_chat_group", {
+            new_group_name: newGroupName
+        });
+
         close();
     }
 
@@ -79,7 +83,7 @@
                     <input
                             id="category-input"
                             type="text"
-                            bind:value={newCategoryName}
+                            bind:value={newGroupName}
                             on:keydown={handleKeyDown}
                             placeholder="e.g. Work, Friends, AI Prompts..."
                             class="w-full px-5 py-4 bg-white/5 border border-white/5 rounded-2xl text-base text-white focus:outline-none focus:border-[#2481cc]/50 focus:bg-white/[0.07] transition-all placeholder-gray-600"
@@ -90,7 +94,7 @@
                 <!-- Кнопка Создать -->
                 <button
                         on:click={() => { handleSubmit(); triggerHaptic(); }}
-                        disabled={!newCategoryName.trim()}
+                        disabled={!newGroupName.trim()}
                         class="w-full bg-[#2481cc] disabled:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-4 rounded-full flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-[#2481cc]/20"
                 >
                     <PlusCircle size={18} />

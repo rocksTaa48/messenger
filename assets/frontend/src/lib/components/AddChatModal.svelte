@@ -33,7 +33,7 @@
     function handleSubmit() {
         if (!selectedModelId) return;
 
-        appState.send("click:submit_new_chat", {
+        appState.send("chat:click_submit", {
             ai_profile_id: selectedModelId,
             system_prompt: systemPrompt
         });

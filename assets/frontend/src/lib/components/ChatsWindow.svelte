@@ -19,9 +19,10 @@
 
     // Функция открытия модалки нового чата
     let isNewChatModalOpen = false;
+
     function openCreateModal() {
         isNewChatModalOpen = true;
-        appState.send("click:create_new_chat");
+        appState.send("chat:click_new");
     }
 
 
@@ -38,7 +39,7 @@
             isLoadingMore = true;
 
             // Отправляем сигнал на бэкенд
-            appState.send("load_more_chats");
+            appState.send("chat:load_more_chats");
         }
     }
 
@@ -47,19 +48,15 @@
         isLoadingMore = false;
     }
 
-
-
-
-
-
-    // Логика переключения верхних категорий диалогов
-    let activeCategory = 'All';
-    let categories = ['All', 'Friends', 'Work'];
+    let activeCategoryId: string | number = 'All';
 
     // Переменная для отслеживания состояния строки поиска (скрыта по умолчанию)
     let isSearchOpen = false;
     let searchQuery = "";
     let isModalOpen = false;
+    $: if (isSearchOpen) {
+        appState.send("chat:click_search_chats", { query: searchQuery });
+    }
     function handleAddCategory(event: CustomEvent<string>) {
         const name = event.detail;
         // Защита от дубликатов
@@ -73,31 +70,27 @@
 <div class="flex flex-col h-full w-full bg-[#0f0f0f] rounded-[24px] p-2 text-white font-sans border border-white/5 shadow-2xl overflow-hidden">
 
     <!-- ЗАГОЛОВОК ОКНА -->
-    <div class="px-2 pt-2">
+    <div class="px-2 pt-2 select-none">
+        <!-- ВЕРХНЯЯ ПАНЕЛЬ: ЗАГОЛОВОК / ПОИСК -->
         <div class="flex items-center justify-between mb-3 h-10">
 
-            <!-- ACHTUNG! - Левая кнопка Edit скрывается, когда открыт поиск -->
             {#if !isSearchOpen}
-                <!-- КНОПКА НОВОЙ ПАПКИ -->
                 <button
                         on:click={() => isModalOpen = true}
                         class="flex-shrink-0 flex items-center justify-center w-18 h-18 text-gray-400 hover:text-[#2481cc]
-                         transition-colors border-b-2 border-transparent pb-1 transition-transform active:scale-95"
+                 transition-colors border-b-2 border-transparent pb-1 transition-transform active:scale-95"
                 >
                     <FolderPlus size={22} />
                 </button>
             {:else}
-                <!-- Пустышка или кнопка отмены для сохранения разметки флекса -->
                 <div class="w-8"></div>
             {/if}
 
-            <!-- ЗАГОЛОВОК (скрывается, когда открыт поиск) -->
             {#if !isSearchOpen}
                 <p class="text-[28px] font-semibold tracking-tight text-gray-900 dark:text-white transition-opacity duration-200">
                     Chats
                 </p>
             {:else}
-                <!-- Если поиск открыт, прямо по центру выкатывается инпут -->
                 <div class="flex-1 relative mx-2 transition-all duration-300">
                 <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400 dark:text-gray-500">
                     <Search size={16} />
@@ -108,7 +101,6 @@
                             placeholder="Search chats..."
                             class="w-full pl-9 pr-8 py-1.5 bg-gray-100 dark:bg-[#242f3d] rounded-xl text-sm focus:outline-none placeholder-gray-400 dark:placeholder-gray-500 text-white border border-transparent focus:border-[#2481cc]/30"
                     />
-                    <!-- Кнопка очистки / закрытия внутри инпута -->
                     {#if searchQuery.length > 0}
                         <button
                                 on:click={() => searchQuery = ""}
@@ -120,11 +112,17 @@
                 </div>
             {/if}
 
-            <!-- ПЕРЕКЛЮЧАТЕЛЬ (Поиск / Отмена) -->
             <button
                     on:click={() => {
                 isSearchOpen = !isSearchOpen;
-                if (!isSearchOpen) searchQuery = ""; // Очищаем поиск при закрытии
+                if (!isSearchOpen) {
+                    searchQuery = "";
+                    if (activeCategoryId === 'All') {
+                        $appState.send("base:click_nav_chats", {});
+                    } else {
+                        $appState.send("base:click_nav_chats", { group_id: activeCategoryId });
+                    }
+                }
             }}
                     class="text-[#2481cc] hover:opacity-80 transition-opacity p-1 transition-transform active:scale-95"
             >
@@ -138,31 +136,52 @@
 
         <!-- ЛЕНТА КАТЕГОРИЙ -->
         <div class="flex items-center w-full gap-3 px-4 mb-2 border-b border-gray-100 dark:border-[#101921]">
-
-            <!-- Контейнер для вкладок -->
             <div class="flex items-center gap-6 overflow-x-auto whitespace-nowrap scrollbar-none flex-1 h-10">
-                {#each categories as category}
-                    {@const isActive = activeCategory === category}
 
-                    <button
-                            class="h-full px-1 text-xs font-semibold tracking-wide transition-all relative flex items-center justify-center pb-1 border-b-2
-                    {isActive
-                        ? 'border-[#2481cc] text-[#2481cc] dark:text-[#52a6e7]'
-                        : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}"
-                            on:click={() => activeCategory = category}
-                    >
-                        {category}
+                <!-- КНОПКА ALL (ТУПАЯ ЗАГЛУШКА) -->
+                <button
+                        class="h-full px-1 text-xs font-semibold tracking-wide transition-all relative flex items-center justify-center pb-1 border-b-2
+                {activeCategoryId === 'All'
+                    ? 'border-[#2481cc] text-[#2481cc] dark:text-[#52a6e7]'
+                    : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}"
+                        on:click={() => {
+                    activeCategoryId = 'All';
+                    appState.send("base:click_nav_chats", {});
+                }}
+                >
+                    All
+                    {#if activeCategoryId === 'All'}
+                        <div class="absolute bottom-0 inset-x-0 h-[2px] bg-[#2481cc] blur-[2px] opacity-50"></div>
+                    {/if}
+                </button>
 
-                        <!-- Мягкое неоновое свечение под активной вкладкой -->
-                        {#if isActive}
-                            <div class="absolute bottom-0 inset-x-0 h-[2px] bg-[#2481cc] blur-[2px] opacity-50"></div>
-                        {/if}
-                    </button>
-                {/each}
+                <!-- ДИНАМИЧЕСКИЕ ГРУППЫ -->
+                {#if $appState && $appState.groups}
+                    {#each $appState.groups as group (group.id)}
+                        {@const isActive = activeCategoryId === group.id}
+
+                        <button
+                                class="h-full px-1 text-xs font-semibold tracking-wide transition-all relative flex items-center justify-center pb-1 border-b-2
+                        {isActive
+                            ? 'border-[#2481cc] text-[#2481cc] dark:text-[#52a6e7]'
+                            : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}"
+                                on:click={() => {
+                            activeCategoryId = group.id;
+                           appState.send("base:click_nav_chats", { group_id: group.id });
+                        }}
+                        >
+                            {group.title}
+
+                            {#if isActive}
+                                <div class="absolute bottom-0 inset-x-0 h-[2px] bg-[#2481cc] blur-[2px] opacity-50"></div>
+                            {/if}
+                        </button>
+                    {/each}
+                {/if}
+
             </div>
         </div>
     </div>
-
     <div   on:scroll={handleScroll}
            class="flex-1 overflow-y-auto pb-24 scrollbar-none space-y-2 px-2 w-full"
     >
@@ -176,7 +195,7 @@
             <Plus size={18} strokeWidth={2.5} />
         </button>
 
-        <!-- Рендерим живой список из сокета Elixir -->
+        <!-- Рендерим живой список чатов из сокета Elixir -->
         {#if $appState && $appState.chats_list}
             {#each $appState.chats_list as chat (chat.id)}
                 <!-- Обязательно передаем проп чата внутрь компонента, когда нибудь точно станет красивым -->

@@ -22,7 +22,7 @@
 
 <!-- При клике шлем экшен прямо на сервер Elixir -->
 <div
-        on:click={() => appState.send("click_open_chat", { chat_id: chat.id })}
+        on:click={() => appState.send("chat:click_open", { chat_id: chat.id })}
         class="flex items-center gap-4 p-3.5 bg-white/[0.03] border border-white/5
          rounded-[24px] hover:bg-white/[0.06] cursor-pointer transition-all active:scale-[0.99]"
 >

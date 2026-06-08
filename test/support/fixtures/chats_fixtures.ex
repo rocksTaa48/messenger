@@ -33,4 +33,18 @@ defmodule Messenger.ChatsFixtures do
 
     message
   end
+
+  @doc """
+  Generate a group.
+  """
+  def group_fixture(attrs \\ %{}) do
+    {:ok, group} =
+      attrs
+      |> Enum.into(%{
+        title: "some title"
+      })
+      |> Messenger.Chats.create_group()
+
+    group
+  end
 end
