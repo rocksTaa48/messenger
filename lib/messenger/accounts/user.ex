@@ -11,6 +11,9 @@ defmodule Messenger.Accounts.User do
     field :role, :string
     field :raw_data, :map
 
+    has_many :groups, Messenger.Chats.Group
+    has_many :chats, Messenger.Chats.Chat
+
     timestamps(type: :utc_datetime)
   end
 

@@ -11,8 +11,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   def handle_in("click_open", payload, socket) do
     current_user = socket.assigns.current_user
     chat_id = Map.get(payload, "chat_id")
-
-
+    chat = Chats.get_chat(current_user.id, chat_id)
     messages = Chats.get_chat_messages(chat_id, current_user.id)
     serialized_messages =
       case messages do
@@ -25,6 +24,7 @@ defmodule MessengerWeb.Actions.ChatActions do
                 |> Map.put("current_screen", "Messenger")
                 |> Map.put("active_chat", %{
       "id" => chat_id,
+      "group_id" => chat.group_id,
       "messages_list" => serialized_messages
     })
 
@@ -175,6 +175,7 @@ defmodule MessengerWeb.Actions.ChatActions do
       socket.assigns.state
 
       |> Map.put("current_screen", "chats")
+      |> Map.put("group_id", group_id)
       |> Map.put("chats_list", formatted_chats)
 
     push(socket, "sync", new_state)

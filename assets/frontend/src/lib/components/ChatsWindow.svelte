@@ -48,7 +48,8 @@
         isLoadingMore = false;
     }
 
-    let activeCategoryId: string | number = 'All';
+    // Реактивная подгрузка активной чат-группы
+    $: activeCategoryId = $appState.group_id || 'All'
 
     // Переменная для отслеживания состояния строки поиска (скрыта по умолчанию)
     let isSearchOpen = false;
@@ -65,6 +66,28 @@
             activeCategory = name; // Сразу переключаем фокус на нее
         }
     }
+
+    // Функция-экшен для центрования элемента в ленте
+    function scrollActiveIntoView(node, isActive) {
+        const performScroll = (active) => {
+            if (active) {
+                setTimeout(() => {
+                    node.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'nearest',
+                        inline: 'center'
+                    });
+                }, 50);
+            }
+        };
+        performScroll(isActive);
+        return {
+            update(newIsActive) {
+                performScroll(newIsActive);
+            }
+        };
+    }
+
 </script>
 
 <div class="flex flex-col h-full w-full bg-[#0f0f0f] rounded-[24px] p-2 text-white font-sans border border-white/5 shadow-2xl overflow-hidden">
@@ -138,16 +161,13 @@
         <div class="flex items-center w-full gap-3 px-4 mb-2 border-b border-gray-100 dark:border-[#101921]">
             <div class="flex items-center gap-6 overflow-x-auto whitespace-nowrap scrollbar-none flex-1 h-10">
 
-                <!-- КНОПКА ALL (ТУПАЯ ЗАГЛУШКА) -->
+                <!-- КНОПКА ALL -->
                 <button
                         class="h-full px-1 text-xs font-semibold tracking-wide transition-all relative flex items-center justify-center pb-1 border-b-2
-                {activeCategoryId === 'All'
-                    ? 'border-[#2481cc] text-[#2481cc] dark:text-[#52a6e7]'
-                    : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}"
-                        on:click={() => {
-                    activeCategoryId = 'All';
-                    appState.send("base:click_nav_chats", {});
-                }}
+            {activeCategoryId === 'All'
+                ? 'border-[#2481cc] text-[#2481cc] dark:text-[#52a6e7]'
+                : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}"
+                        on:click={() => appState.send("base:click_nav_chats", {})}
                 >
                     All
                     {#if activeCategoryId === 'All'}
@@ -158,22 +178,20 @@
                 <!-- ДИНАМИЧЕСКИЕ ГРУППЫ -->
                 {#if $appState && $appState.groups}
                     {#each $appState.groups as group (group.id)}
-                        {@const isActive = activeCategoryId === group.id}
+                        <!-- Безопасное сравнение типов: приводим оба ID к строке -->
+                        {@const isActive = activeCategoryId.toString() === group.id.toString()}
 
-                        <button
+                        <button use:scrollActiveIntoView={isActive}
                                 class="h-full px-1 text-xs font-semibold tracking-wide transition-all relative flex items-center justify-center pb-1 border-b-2
-                        {isActive
-                            ? 'border-[#2481cc] text-[#2481cc] dark:text-[#52a6e7]'
-                            : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}"
-                                on:click={() => {
-                            activeCategoryId = group.id;
-                           appState.send("base:click_nav_chats", { group_id: group.id });
-                        }}
+                                {isActive
+                                ? 'border-[#2481cc] text-[#2481cc] dark:text-[#52a6e7]'
+                                : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}"
+                                on:click={() => appState.send("base:click_nav_chats", { group_id: Number(group.id) })}
                         >
                             {group.title}
 
                             {#if isActive}
-                                <div class="absolute bottom-0 inset-x-0 h-[2px] bg-[#2481cc] blur-[2px] opacity-50"></div>
+                                <div class="absolute bottom-[0px] inset-x-0 h-[2px] bg-[#2481cc] blur-[2px] opacity-50"></div>
                             {/if}
                         </button>
                     {/each}
@@ -181,6 +199,7 @@
 
             </div>
         </div>
+
     </div>
     <div   on:scroll={handleScroll}
            class="flex-1 overflow-y-auto pb-24 scrollbar-none space-y-2 px-2 w-full"

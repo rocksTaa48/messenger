@@ -7,14 +7,8 @@ defmodule Messenger.Chats do
   @doc"""
   Функция достает все сообщения из текущего чата пользователя
   """
-  def get_chat_messages(chat_id) do
-    Message
-
-    |> where(chat_id: ^chat_id)
-    |> order_by(desc: :inserted_at)
-    |> limit(15)
-    |> Repo.all()
-    |> Enum.reverse()
+  def get_chat(user_id, chat_id) do
+    Repo.get_by!(Chat, id: chat_id, user_id: user_id)
   end
 
   @doc """

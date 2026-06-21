@@ -11,7 +11,7 @@ export interface AppState {
     user: { id: number; username: string; balance: number } | null;
     chats_list: Array<{ id: string; title: string; unread: number }>;
     groups: Array<{ id: string; title: string }>;
-    active_chat: { id: string; messages: Array<{ id: number; text: string; sender: string }> } | null;
+    active_chat: { id: string; messages: Array<{ id: number; text: string; group_id: number; sender: string }> } | null;
     settings: { theme: string; lang: string };
 }
 

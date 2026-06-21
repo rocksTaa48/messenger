@@ -1,6 +1,6 @@
 defmodule MessengerWeb.Actions.BaseActions do
   import Phoenix.Channel, only: [push: 3]
-  import Phoenix.Socket, only: [assign: 3]  
+  import Phoenix.Socket, only: [assign: 3]
   alias Messenger.Chats
   alias Messenger.AiProfiles
   alias Messenger.Serializer
@@ -10,7 +10,13 @@ defmodule MessengerWeb.Actions.BaseActions do
   """
   def handle_in("click_nav_chats", payload, socket) do
     # Подгружаем свежий список чатов из базы для экрана 'chats'
+    IO.inspect(payload, label: "\n📥 [FRONTEND -> BACKEND] СЫРОЙ PAYLOAD")
+
     group_id = Map.get(payload, "group_id")
+
+    # 2. СМОТРИМ, КАКОЙ ТИП ДАННЫХ У GROUP_ID (String, Integer или nil)
+    IO.inspect(group_id, label: "🔍 [CONVERTED] ИЗВЛЕЧЕННЫЙ GROUP_ID")
+    IO.inspect(is_binary(group_id), label: "❓ ЯВЛЯЕТСЯ ЛИ СТРОКОЙ")
     updated_chats = Chats.list_user_chats(socket.assigns.current_user.id, nil, nil, %{"group_id" => group_id})
     formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
 
@@ -20,6 +26,7 @@ defmodule MessengerWeb.Actions.BaseActions do
 
       |> Map.put("current_screen", "chats")
       |> Map.put("chats_list", formatted_chats)
+      |> Map.put("group_id", group_id)
       |> Map.delete("active_chat") # Уходим из чата — чистим память от тяжелых сообщений
 
     push(socket, "sync", new_state)

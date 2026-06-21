@@ -19,7 +19,7 @@
         if (!newGroupName) return;
 
         appState.send("chat:click_submit_chat_group", {
-            new_group_name: newGroupName
+            title: newGroupName
         });
 
         close();
