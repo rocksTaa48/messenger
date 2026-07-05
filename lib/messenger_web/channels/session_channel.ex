@@ -24,7 +24,6 @@ defmodule MessengerWeb.SessionChannel do
     # Собираем единое Дерево Стейта, это то что полетит на фронт, все данные, важно попозже добавить ДЕЛЬТУ
     # Что бы не слать весь стейт заново, придумать методы отправки только точечных изменений $append $delete $prepend
     initial_tree_state = %{
-      "current_screen" => "chats",
       "user" => %{
         "id" => current_user.id,
         "telegram_id" => current_user.telegram_id,

@@ -1,5 +1,4 @@
 <script lang="ts">
-    // Иморты
     import { Search, X, FolderPlus, MessageSquare, Bot, ImageIcon, Sparkles, Plus  } from 'lucide-svelte';
     import AddCategoryModal from './AddCategoryModal.svelte';
     import { createEventDispatcher } from 'svelte';
@@ -8,66 +7,56 @@
     import AddChatModal from "./AddChatModal.svelte";
     import WebApp from "@twa-dev/sdk";
 
-    // Константы
     const dispatch = createEventDispatcher<{ selectChat: any }>();
 
-    // Функция отклика (Вибро на iPhone)
     function handleMenuClick() {
         if (WebApp.HapticFeedback) WebApp.HapticFeedback.impactOccurred('light');
         console.log('Menu clicked');
     }
 
-    // Функция открытия модалки нового чата
     let isNewChatModalOpen = false;
 
     function openCreateModal() {
         isNewChatModalOpen = true;
+        // Если открытие модалки требует каких-то данных от бэка, оставляем отправку,
+        // но саму навигацию не трогаем, пока юзер не создаст чат.
         appState.send("chat:click_new");
     }
 
-
-    // Функция, которая следит за прокруткой контейнера
     let isLoadingMore = false;
     function handleScroll(e: Event) {
         const target = e.target as HTMLElement;
-
-        // Считаем расстояние до дна (минус 60 пикселей буфера, чтобы подгрузка шла бесшовно)
         const isBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 60;
 
-        // Если дошли до дна, сервер говорит, что чаты еще есть, и мы сейчас не в процессе загрузки
+        // Внимание:has_more_chats должно по-прежнему прилетать в $appState от Elixir
         if (isBottom && $appState.has_more_chats && !isLoadingMore) {
             isLoadingMore = true;
-
-            // Отправляем сигнал на бэкенд
             appState.send("chat:load_more_chats");
         }
     }
 
-    // Как только стор обновился (прилетели новые чаты), снимаем блокировку загрузки
     $: if ($appState?.chats_list) {
         isLoadingMore = false;
     }
 
-    // Реактивная подгрузка активной чат-группы
-    $: activeCategoryId = $appState.group_id || 'All'
+    // Реактивно вытаскиваем group_id прямо из параметров НАШЕГО навигационного контекста
+    $: activeCategoryId = $appState.nav_context.params?.group_id || 'All'
 
-    // Переменная для отслеживания состояния строки поиска (скрыта по умолчанию)
     let isSearchOpen = false;
     let searchQuery = "";
     let isModalOpen = false;
+
+    // Поиск по-прежнему отправляет запрос, но экран ('chats') не меняется, меняются только данные в chats_list
     $: if (isSearchOpen) {
         appState.send("chat:click_search_chats", { query: searchQuery });
     }
+
     function handleAddCategory(event: CustomEvent<string>) {
+        // Логика добавления категории (если она обрабатывается локально или шлется на бэк)
         const name = event.detail;
-        // Защита от дубликатов
-        if (!categories.includes(name)) {
-            categories = [...categories, name]; // Добавляем реактивно в массив
-            activeCategory = name; // Сразу переключаем фокус на нее
-        }
+        appState.send("category:add", { name });
     }
 
-    // Функция-экшен для центрования элемента в ленте
     function scrollActiveIntoView(node, isActive) {
         const performScroll = (active) => {
             if (active) {
@@ -87,8 +76,8 @@
             }
         };
     }
-
 </script>
+
 
 <div class="flex flex-col h-full w-full bg-[#0f0f0f] rounded-[24px] p-2 text-white font-sans border border-white/5 shadow-2xl overflow-hidden">
 
@@ -135,18 +124,18 @@
                 </div>
             {/if}
 
-            <button
-                    on:click={() => {
-                isSearchOpen = !isSearchOpen;
-                if (!isSearchOpen) {
-                    searchQuery = "";
-                    if (activeCategoryId === 'All') {
-                        $appState.send("base:click_nav_chats", {});
-                    } else {
-                        $appState.send("base:click_nav_chats", { group_id: activeCategoryId });
-                    }
-                }
-            }}
+            <button on:click={() => {
+                        isSearchOpen = !isSearchOpen;
+                        if (!isSearchOpen) {
+                            searchQuery = "";
+                            // Отмена поиска: возвращаем юзера в дефолтное состояние текущей категории
+                            if (activeCategoryId === 'All') {
+                                appState.goTo({ screen: 'chats' });
+                            } else {
+                                appState.goTo({ screen: 'chats', params: { group_id: activeCategoryId } });
+                            }
+                        }
+                    }}
                     class="text-[#2481cc] hover:opacity-80 transition-opacity p-1 transition-transform active:scale-95"
             >
                 {#if !isSearchOpen}
@@ -167,7 +156,7 @@
             {activeCategoryId === 'All'
                 ? 'border-[#2481cc] text-[#2481cc] dark:text-[#52a6e7]'
                 : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}"
-                        on:click={() => appState.send("base:click_nav_chats", {})}
+                        on:click={() => appState.goTo({ screen: 'chats' })}
                 >
                     All
                     {#if activeCategoryId === 'All'}
@@ -178,7 +167,6 @@
                 <!-- ДИНАМИЧЕСКИЕ ГРУППЫ -->
                 {#if $appState && $appState.groups}
                     {#each $appState.groups as group (group.id)}
-                        <!-- Безопасное сравнение типов: приводим оба ID к строке -->
                         {@const isActive = activeCategoryId.toString() === group.id.toString()}
 
                         <button use:scrollActiveIntoView={isActive}
@@ -186,7 +174,7 @@
                                 {isActive
                                 ? 'border-[#2481cc] text-[#2481cc] dark:text-[#52a6e7]'
                                 : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}"
-                                on:click={() => appState.send("base:click_nav_chats", { group_id: Number(group.id) })}
+                                on:click={() => appState.goTo({ screen: 'chats', params: { group_id: group.id.toString() } })}
                         >
                             {group.title}
 
@@ -201,8 +189,8 @@
         </div>
 
     </div>
-    <div   on:scroll={handleScroll}
-           class="flex-1 overflow-y-auto pb-24 scrollbar-none space-y-2 px-2 w-full"
+    <div on:scroll={handleScroll}
+         class="flex-1 overflow-y-auto pb-24 scrollbar-none space-y-2 px-2 w-full"
     >
 
         <button on:click={() => openCreateModal()}
@@ -217,10 +205,8 @@
         <!-- Рендерим живой список чатов из сокета Elixir -->
         {#if $appState && $appState.chats_list}
             {#each $appState.chats_list as chat (chat.id)}
-                <!-- Обязательно передаем проп чата внутрь компонента, когда нибудь точно станет красивым -->
                 <Chat {chat} />
             {/each}
-            <!-- Красивый индикатор догрузки внизу списка -->
             {#if isLoadingMore}
                 <div class="w-full text-center py-4 text-xs text-slate-500 animate-pulse">
                     Подгружаем старые переписки...
@@ -234,6 +220,7 @@
     <AddCategoryModal bind:isOpen={isModalOpen} on:add={handleAddCategory} />
     <AddChatModal bind:isOpen={isNewChatModalOpen} />
 </div>
+
 
 <style>
     /* Легкий глянец иконкам */

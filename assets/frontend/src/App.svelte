@@ -21,75 +21,68 @@
     appState.initSession(initData);
   });
 
-  // Логика скрытия футера: проверяем экраны, которые прилетают с бэкенда
-  // Мапим названия экранов из Elixir на логику отступов
-  const scalingScreens = ['Messenger', 'Agents', 'ProfileEdit', 'CryptoPayment'];
+  // Логика скрытия футера: читаем состояние экрана прямо из локального nav_context
+  $: currentScreen = $appState.nav_context?.screen || 'chats';
 
-  // Перехват кликов из Футера: тупо редиректим намерения на Elixir сервер
+  // Перехват кликов из Футера: теперь навигацией рулит клиент через goTo!
   function handleTabChange(e: CustomEvent<string>) {
     const targetTab = e.detail; // 'Chats', 'Agents', 'Settings'
 
-    // Переводим название вкладки в экшен для бэкенда
-    if (targetTab === 'Chats') appState.send("base:click_nav_chats");
-    if (targetTab === 'Agents') appState.send("base:nav_agents");
-    if (targetTab === 'Settings') appState.send("base:nav_settings");
+    if (targetTab === 'Chats') appState.goTo({ screen: 'chats' });
+    if (targetTab === 'Agents') appState.goTo({ screen: 'inside_chat', params: { chat_id: 'agents_lobby' } }); // Или как у вас устроен экран агентов
+    if (targetTab === 'Settings') appState.goTo({ screen: 'settings' });
   }
 </script>
 
 <!-- Основной контейнер с системным фоном -->
 <main class="fixed inset-0 flex flex-col bg-tg-bg text-tg-text overflow-hidden justify-center items-center">
 
-  <!-- Сценарий 1: Подключение или реконнект (смотрим поле status в едином сторе) -->
+  <!-- Сценарий 1: Подключение или реконнект -->
   {#if !$appState || $appState.status === 'connecting'}
     <div class="flex flex-col items-center gap-3">
       <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-500"></div>
       <p class="text-slate-400 animate-pulse">Connecting... Проверяем сеть...</p>
     </div>
 
-    <!-- Сценарий 2: Ошибка (сервер сделал reject в connect/3) -->
+    <!-- Сценарий 2: Ошибка -->
   {:else if $appState.status === 'error'}
     <div class="text-red-400 bg-red-950/50 border border-red-900 p-4 rounded-xl text-center">
       <h2 class="font-bold text-lg mb-1">Ошибка авторизации</h2>
       <p class="text-sm opacity-90">Отклонен сервером.</p>
     </div>
 
-    <!-- Сценарий 3: Полный коннект, отрисовываем то, что сказал сервер -->
+    <!-- Сценарий 3: Полный коннект -->
   {:else}
+    <!-- Скрываем отступы футера, если мы внутри чата (inside_chat) или настроек, если это нужно -->
+    <div class="w-full flex-1 flex flex-col min-h-0 px-2 pt-1 {currentScreen === 'inside_chat' ? 'pb-2' : 'pb-24'}">
 
-    <div class="w-full flex-1 flex flex-col min-h-0 px-2 pt-1 {scalingScreens.includes($appState.current_screen) ? 'pb-2' : 'pb-24'}">
-
-      <!-- Индикатор живого real-time сокета потом доделаю =) -->
+      <!-- Индикатор живого real-time сокета -->
       <span class="w-2 h-2 bg-emerald-400 rounded-full animate-ping absolute top-2 right-2"></span>
 
       <!-- Список чатов -->
-      {#if $appState.current_screen === 'chats'}
-        <!-- Компонент чатов забирает данные прямо из стора, при клике на чат мы шлем событие на сервер -->
-        <Chats on:selectChat={(e) => appState.send("chat:click_open_chat", { chat_id: e.detail })} />
+      {#if currentScreen === 'chats'}
+        <Chats />
       {/if}
 
-      <!-- Внутри конкретного диалога (Messenger) -->
-      {#if $appState.current_screen === 'Messenger'}
-        <!-- По кнопке " < " Назад - шлем команду бэкенду вернуться к списку чатов -->
-        <Messenger on:back={() => appState.send("base:click_nav_chats")} />
-      {/if}
-
-      <!-- Агенты -->
-      {#if $appState.current_screen === 'Agents'}
-        <Agents on:back={() => appState.send("base:click_nav_chats")} />
+      <!-- Внутри конкретного диалога -->
+      {#if currentScreen === 'inside_chat'}
+        <!-- По кнопке Назад вызываем метод appState.goBack() -->
+        <Messenger on:back={() => appState.goBack()} />
       {/if}
 
       <!-- Настройки -->
-      {#if $appState.current_screen === 'settings'}
-        <Settings on:back={() => appState.send("base:click_nav_chats")} />
+      {#if currentScreen === 'settings'}
+        <Settings on:back={() => appState.goBack()} />
       {/if}
 
     </div>
 
-    <!-- Наш Футер. Передаем ему текущий экран (чтобы подсветить нужную иконку) и слушаем клики -->
-    <!-- В футере вкладки называются с большой буквы, подгоняем интерфейс -->
-    <Footer
-            activeTab={$appState.current_screen === 'settings' ? 'Settings' : $appState.current_screen === 'chats' ? 'Chats' : $appState.current_screen}
-            on:change={handleTabChange}
-    />
+    <!-- Футер. Передаем активную вкладку на основе локального стейта клиента -->
+    {#if currentScreen !== 'inside_chat'}
+      <Footer
+              activeTab={currentScreen === 'settings' ? 'Settings' : 'Chats'}
+              on:change={handleTabChange}
+      />
+    {/if}
   {/if}
 </main>

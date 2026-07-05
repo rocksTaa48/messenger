@@ -21,7 +21,6 @@ defmodule MessengerWeb.Actions.ChatActions do
 
     new_state = socket.assigns.state
 
-                |> Map.put("current_screen", "Messenger")
                 |> Map.put("active_chat", %{
       "id" => chat_id,
       "group_id" => chat.group_id,
@@ -44,7 +43,7 @@ defmodule MessengerWeb.Actions.ChatActions do
     ai_profiles = AiProfiles.list_user_ai_profiles(current_user.id)
     formated_profile = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
 
-    # Оставляем screen - "chats", просто дополняем дерево массивом ai_profiles
+    # Дополняем дерево массивом ai_profiles
     new_state = socket.assigns.state
                 |> Map.put("ai_profiles", formated_profile)
 
@@ -98,7 +97,6 @@ defmodule MessengerWeb.Actions.ChatActions do
             new_state =
               socket.assigns.state
 
-              |> Map.put("current_screen", "Messenger")
               |> Map.put("chats_list", formatted_chats)
               |> Map.put("active_chat", %{
                 "id" => to_string(new_chat.id),
@@ -174,7 +172,6 @@ defmodule MessengerWeb.Actions.ChatActions do
     new_state =
       socket.assigns.state
 
-      |> Map.put("current_screen", "chats")
       |> Map.put("group_id", group_id)
       |> Map.put("chats_list", formatted_chats)
 
@@ -198,7 +195,6 @@ defmodule MessengerWeb.Actions.ChatActions do
         new_state =
           socket.assigns.state
 
-          |> Map.put("current_screen", "chats")
           |> Map.put("groups", formatted_groups)
 
         # Отправляем синхронизацию на фронтенд
@@ -224,7 +220,6 @@ defmodule MessengerWeb.Actions.ChatActions do
         formatted_groups = Enum.map(updated_groups, &Serializer.group_serialize/1)
         new_state = socket.assigns.state
 
-                    |> Map.put("current_screen", "chats")
                     |> Map.put("groups", formatted_groups )
 
         # Шлем обновленный монолит-стейт во фронтенд
@@ -249,7 +244,6 @@ defmodule MessengerWeb.Actions.ChatActions do
         formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
         new_state = socket.assigns.state
 
-                    |> Map.put("current_screen", "chats")
                     |> Map.put("chats_list", formatted_chats )
 
         # Шлем обновленный монолит-стейт во фронтенд
@@ -274,7 +268,6 @@ defmodule MessengerWeb.Actions.ChatActions do
         formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
         new_state = socket.assigns.state
 
-                    |> Map.put("current_screen", "chats")
                     |> Map.put("chats_list", formatted_chats )
 
         # Шлем обновленный монолит-стейт во фронтенд

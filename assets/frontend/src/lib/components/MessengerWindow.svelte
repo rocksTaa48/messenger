@@ -4,7 +4,7 @@
     import { appState } from '../../stores/socketStore';
     import Message from "./partials/Message.svelte"
 
-    // Вся информация реактивно извлекается из appState!
+    // Вся информация реактивно извлекается из appState
     $: activeChat = $appState.active_chat;
     $: messages = activeChat?.messages || [];
 
@@ -18,7 +18,7 @@
     let isAttachmentMenuOpen = false;
     const currentGroupId = $appState.active_chat?.group_id;
 
-    // Вспомогательная функция для красивого вывода времени из ISO8601
+    // Вспомогательная функция для вывода времени из ISO8601
     function formatTime(isoString: string): string {
         if (!isoString) return "";
         try {
@@ -94,16 +94,17 @@
 
     <!-- ШАПКА ЧАТА -->
     <header class="h-14 bg-white/[0.02] backdrop-blur-xl border-b border-white/5 flex items-center px-4 justify-between flex-shrink-0 z-10">
-        <!-- Клик шлет ивент навигации назад на бэкенд, как мы настроили ранее -->
-        <button on:click={() => appState.send("base:click_nav_chats", { group_id: currentGroupId })} class="text-[#2481cc] hover:opacity-80 transition-all p-1 -ml-1 flex items-center justify-center">
+
+        <!-- Выполняем goBack -->
+        <button on:click={() => appState.goBack()} class="text-[#2481cc] hover:opacity-80 transition-all p-1 -ml-1 flex items-center justify-center">
             <ChevronLeft size={24} strokeWidth={2.5} />
         </button>
 
         <div class="flex flex-col items-center flex-1 pr-6">
             <span class="text-sm font-bold tracking-tight">{chatName}</span>
             <span class="text-[10px] font-medium text-[#2481cc]">
-                online
-            </span>
+            online
+        </span>
         </div>
 
         <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-[#2481cc] to-[#1d6fa0] text-white text-xs font-bold flex items-center justify-center flex-shrink-0">

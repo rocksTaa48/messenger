@@ -19,12 +19,11 @@ defmodule MessengerWeb.Actions.BaseActions do
     IO.inspect(is_binary(group_id), label: "❓ ЯВЛЯЕТСЯ ЛИ СТРОКОЙ")
     updated_chats = Chats.list_user_chats(socket.assigns.current_user.id, nil, nil, %{"group_id" => group_id})
     formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
+    IO.inspect(payload, label: "\n📥 [LOG FROM FRONTEND]")
 
-    # Меняем экран в стейте на 'chats'
     new_state =
       socket.assigns.state
 
-      |> Map.put("current_screen", "chats")
       |> Map.put("chats_list", formatted_chats)
       |> Map.put("group_id", group_id)
       |> Map.delete("active_chat") # Уходим из чата — чистим память от тяжелых сообщений

@@ -1,14 +1,15 @@
 <script lang="ts">
     import { Bot, ImageIcon, MessageSquare, Sparkles } from 'lucide-svelte';
     import { createEventDispatcher } from 'svelte';
+    // Импортируем наш стор
     import { appState } from '../../../stores/socketStore';
 
-    // 1. Принимаем объект чата сверху от родителя
+    // Принимаем объект чата сверху от родителя
     export let chat: any;
 
     const dispatch = createEventDispatcher();
 
-    // 2. Мапим строку с бэкенда на живые иконки Lucide
+    // Мапим строку с бэкенда на живые иконки Lucide
     const iconMap: Record<string, any> = {
         'bot': Bot,
         'image': ImageIcon,
@@ -16,19 +17,24 @@
         'default': MessageSquare
     };
 
-    // Выбираем иконку (если сервер прислал то, чего нет — берем дефолтную)
+    // Выбираем иконку
     $: currentIcon = iconMap[chat.icon_type] || iconMap['default'];
 </script>
 
-<!-- При клике шлем экшен прямо на сервер Elixir -->
+<!-- ТЕПЕРЬ ПРИ КЛИКЕ МЫ УПРАВЛЯЕМ НАВИГАЦИЕЙ НА КЛИЕНТЕ -->
 <div
-        on:click={() => appState.send("chat:click_open", { chat_id: chat.id })}
+        on:click={() => appState.goTo({
+            screen: 'inside_chat',
+            params: {
+                chat_id: chat.id.toString(),
+                group_id: $appState.nav_context.params?.group_id || 'All'
+            }
+        })}
         class="flex items-center gap-4 p-3.5 bg-white/[0.03] border border-white/5
          rounded-[24px] hover:bg-white/[0.06] cursor-pointer transition-all active:scale-[0.99]"
 >
 
     <!-- Иконка чата (Аватарка) -->
-    <!-- Классы цвета (например, "text-purple-400 bg-purple-500/10") сервер тоже может спокойно отдавать строкой -->
     <div class="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 {chat.icon_color || 'text-[#2481cc] bg-[#2481cc]/10'}">
         <svelte:component this={currentIcon} size={24} />
     </div>
