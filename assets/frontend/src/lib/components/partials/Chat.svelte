@@ -1,5 +1,6 @@
 <script lang="ts">
     import { Bot, ImageIcon, MessageSquare, Sparkles } from 'lucide-svelte';
+    import { longPress } from '../../actions/longPress';
     import { createEventDispatcher } from 'svelte';
     // Импортируем наш стор
     import { appState } from '../../../stores/socketStore';
@@ -19,18 +20,23 @@
 
     // Выбираем иконку
     $: currentIcon = iconMap[chat.icon_type] || iconMap['default'];
+
+    function handleLongPress(event: CustomEvent) {
+        dispatch('chatLongPress', { chat, originalEvent: event.detail.originalEvent });
+    }
 </script>
 
-<!-- ТЕПЕРЬ ПРИ КЛИКЕ МЫ УПРАВЛЯЕМ НАВИГАЦИЕЙ НА КЛИЕНТЕ -->
+<!-- ПРИ КЛИКЕ МЫ УПРАВЛЯЕМ НАВИГАЦИЕЙ НА КЛИЕНТЕ -->
 <div
+        use:longPress={{ duration: 500, callback: handleLongPress }}
         on:click={() => appState.goTo({
-            screen: 'inside_chat',
-            params: {
-                chat_id: chat.id.toString(),
-                group_id: $appState.nav_context.params?.group_id || 'All'
-            }
-        })}
-        class="flex items-center gap-4 p-3.5 bg-white/[0.03] border border-white/5
+    screen: 'inside_chat',
+    params: {
+      chat_id: chat.id.toString(),
+      group_id: $appState.nav_context.params?.group_id || 'All'
+    }
+  })}
+        class="chat flex items-center gap-4 p-3.5 bg-white/[0.03] border border-white/5
          rounded-[24px] hover:bg-white/[0.06] cursor-pointer transition-all active:scale-[0.99]"
 >
 
@@ -70,3 +76,11 @@
         {/if}
     </div>
 </div>
+<style>
+    .chat {
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: pan-y;
+        -webkit-touch-callout: none;
+    }
+</style>

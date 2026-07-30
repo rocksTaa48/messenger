@@ -60,7 +60,11 @@ defmodule Messenger.Chats do
   Функция отдает список чатов с ограничением с пагинацией по курсору,
   Если before_cursor = nil, возвращаются самые свежие чаты - первая страница
   """
-  def list_user_chats(user_id, limit \\ 15, before_cursor \\ nil, options \\ %{}) do
+  def list_user_chats(user_id, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 15)
+    before_cursor = Keyword.get(opts, :before_cursor)
+    options = Keyword.get(opts, :options, %{})
+
     Chat
 
     |> where([c], c.user_id == ^user_id)
@@ -151,13 +155,20 @@ defmodule Messenger.Chats do
   Обновляем чат
   """
   def update_chat(chat_id, user_id, attrs) do
-    case Repo.get_by(Chat, chat_id: chat_id, user_id: user_id) do
+    case Repo.get_by(Chat, id: chat_id, user_id: user_id) do
       nil -> # Если чат не обнаружен
         {:error, :not_found}
       chat ->
         chat
         |> Chat.changeset(attrs)
         |> Repo.update()
+    end
+  end
+
+  def remove_chat(chat_id, user_id) do
+    case Repo.get_by(Chat, id: chat_id, user_id: user_id) do
+      nil -> {:error, :not_found}
+      chat -> Repo.delete(chat)
     end
   end
 

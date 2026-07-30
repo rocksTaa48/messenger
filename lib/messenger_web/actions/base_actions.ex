@@ -17,7 +17,7 @@ defmodule MessengerWeb.Actions.BaseActions do
     # 2. СМОТРИМ, КАКОЙ ТИП ДАННЫХ У GROUP_ID (String, Integer или nil)
     IO.inspect(group_id, label: "🔍 [CONVERTED] ИЗВЛЕЧЕННЫЙ GROUP_ID")
     IO.inspect(is_binary(group_id), label: "❓ ЯВЛЯЕТСЯ ЛИ СТРОКОЙ")
-    updated_chats = Chats.list_user_chats(socket.assigns.current_user.id, nil, nil, %{"group_id" => group_id})
+    updated_chats = Chats.list_user_chats(socket.assigns.current_user.id, options: %{"group_id" => group_id})
     formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
     IO.inspect(payload, label: "\n📥 [LOG FROM FRONTEND]")
 

@@ -1,10 +1,12 @@
 <script lang="ts">
-    import { Search, X, FolderPlus, MessageSquare, Bot, ImageIcon, Sparkles, Plus  } from 'lucide-svelte';
+    import { Search, X, Plus, Folder, FolderX, Trash2, Pencil, Pin } from 'lucide-svelte';
     import AddCategoryModal from './AddCategoryModal.svelte';
+    import AddChatModal from "./AddChatModal.svelte";
+    import Chat from "./partials/Chat.svelte";
+    import ChatContextMenu from './ChatContextMenu.svelte';
+    import ChatsFoldersModal from './ChatsFoldersModal.svelte';
     import { createEventDispatcher } from 'svelte';
     import { appState } from '../../stores/socketStore';
-    import Chat from "./partials/Chat.svelte";
-    import AddChatModal from "./AddChatModal.svelte";
     import WebApp from "@twa-dev/sdk";
 
     const dispatch = createEventDispatcher<{ selectChat: any }>();
@@ -18,8 +20,6 @@
 
     function openCreateModal() {
         isNewChatModalOpen = true;
-        // Если открытие модалки требует каких-то данных от бэка, оставляем отправку,
-        // но саму навигацию не трогаем, пока юзер не создаст чат.
         appState.send("chat:click_new");
     }
 
@@ -28,7 +28,6 @@
         const target = e.target as HTMLElement;
         const isBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 60;
 
-        // Внимание:has_more_chats должно по-прежнему прилетать в $appState от Elixir
         if (isBottom && $appState.has_more_chats && !isLoadingMore) {
             isLoadingMore = true;
             appState.send("chat:load_more_chats");
@@ -39,20 +38,20 @@
         isLoadingMore = false;
     }
 
-    // Реактивно вытаскиваем group_id прямо из параметров НАШЕГО навигационного контекста
     $: activeCategoryId = $appState.nav_context.params?.group_id || 'All'
 
     let isSearchOpen = false;
     let searchQuery = "";
     let isModalOpen = false;
+    let isFoldersModalOpen = false;
+    let folderModalChatId: string | null = null;
+    let folderModalChatTitle = '';
 
-    // Поиск по-прежнему отправляет запрос, но экран ('chats') не меняется, меняются только данные в chats_list
     $: if (isSearchOpen) {
         appState.send("chat:click_search_chats", { query: searchQuery });
     }
 
     function handleAddCategory(event: CustomEvent<string>) {
-        // Логика добавления категории (если она обрабатывается локально или шлется на бэк)
         const name = event.detail;
         appState.send("category:add", { name });
     }
@@ -76,8 +75,89 @@
             }
         };
     }
-</script>
 
+    // ЛОГИКА КОНТЕКСТНОГО МЕНЮ
+    let isContextMenuOpen = false;
+    let contextMenuChatTitle = '';
+    let contextMenuActions: any[] = [];
+
+    function showContextMenu(chat: any) {
+        // Haptic при появлении меню
+        if (WebApp.HapticFeedback) WebApp.HapticFeedback.impactOccurred('medium');
+
+        contextMenuChatTitle = chat.name || chat.title || 'Без названия';
+
+        const isOnSpecificFolder = activeCategoryId && activeCategoryId !== 'All';
+
+        contextMenuActions = [
+            {
+                id: 'folder',
+                label: isOnSpecificFolder ? 'Убрать из папки' : 'Переместить в папку',
+                icon: isOnSpecificFolder ? FolderX : Folder,
+                isDanger: isOnSpecificFolder,
+                onClick: () => {
+                    if (isOnSpecificFolder) {
+                        // Убираем из папки
+                        appState.send("chat:click_update_chat_group", {
+                            chat_id: chat.id?.toString(),
+                            group_id: activeCategoryId,
+                            action: "remove"
+                        });
+                        isContextMenuOpen = false;
+                    } else {
+                        // Открываем модалку выбора папки
+                        folderModalChatId = chat.id?.toString() || null;
+                        folderModalChatTitle = chat.name || chat.title || 'Без названия';
+                        isContextMenuOpen = false;
+                        isFoldersModalOpen = true;
+                    }
+                }
+            },
+            {
+                id: 'pin',
+                label: 'Закрепить',
+                icon: Pin,
+                onClick: () => {
+                    console.log('Pin chat:', chat.id);
+                    // appState.send("chat:pin", { chat_id: chat.id })
+                }
+            },
+            {
+                id: 'rename',
+                label: 'Переименовать',
+                icon: Pencil,
+                onClick: () => {
+                    console.log('Rename chat:', chat.id);
+                    // appState.send("chat:rename_prompt", { chat_id: chat.id })
+                }
+            },
+            {
+                id: 'delete',
+                label: 'Удалить чат',
+                icon: Trash2,
+                isDanger: true,
+                onClick: () => {
+                    if (confirm('Вы уверены, что хотите удалить этот чат? Это действие нельзя отменить.')) {
+                        const payload = activeCategoryId !== 'All'
+                            ? { chat_id: chat.id, group_id: activeCategoryId }
+                            : { chat_id: chat.id };
+
+                        console.log('Delete chat:', chat.id);
+                        appState.send("chat:click_delete_chat", payload)
+                    }
+                }
+            }
+        ];
+
+        isContextMenuOpen = true;
+    }
+
+    function handleChatLongPress(event: CustomEvent) {
+        const { chat } = event.detail;
+        showContextMenu(chat);
+    }
+
+</script>
 
 <div class="flex flex-col h-full w-full bg-[#0f0f0f] rounded-[24px] p-2 text-white font-sans border border-white/5 shadow-2xl overflow-hidden">
 
@@ -89,13 +169,13 @@
             {#if !isSearchOpen}
                 <button
                         on:click={() => isModalOpen = true}
-                        class="flex-shrink-0 flex items-center justify-center w-18 h-18 text-gray-400 hover:text-[#2481cc]
+                        class="flex-shrink-0 flex items-center justify-center w-10 h-10 text-gray-400 hover:text-[#2481cc]
                  transition-colors border-b-2 border-transparent pb-1 transition-transform active:scale-95"
                 >
-                    <FolderPlus size={22} />
+                    <Folder size={22} />
                 </button>
             {:else}
-                <div class="w-8"></div>
+                <div class="w-10"></div>
             {/if}
 
             {#if !isSearchOpen}
@@ -128,7 +208,6 @@
                         isSearchOpen = !isSearchOpen;
                         if (!isSearchOpen) {
                             searchQuery = "";
-                            // Отмена поиска: возвращаем юзера в дефолтное состояние текущей категории
                             if (activeCategoryId === 'All') {
                                 appState.goTo({ screen: 'chats' });
                             } else {
@@ -150,7 +229,6 @@
         <div class="flex items-center w-full gap-3 px-4 mb-2 border-b border-gray-100 dark:border-[#101921]">
             <div class="flex items-center gap-6 overflow-x-auto whitespace-nowrap scrollbar-none flex-1 h-10">
 
-                <!-- КНОПКА ALL -->
                 <button
                         class="h-full px-1 text-xs font-semibold tracking-wide transition-all relative flex items-center justify-center pb-1 border-b-2
             {activeCategoryId === 'All'
@@ -164,7 +242,6 @@
                     {/if}
                 </button>
 
-                <!-- ДИНАМИЧЕСКИЕ ГРУППЫ -->
                 {#if $appState && $appState.groups}
                     {#each $appState.groups as group (group.id)}
                         {@const isActive = activeCategoryId.toString() === group.id.toString()}
@@ -189,6 +266,7 @@
         </div>
 
     </div>
+
     <div on:scroll={handleScroll}
          class="flex-1 overflow-y-auto pb-24 scrollbar-none space-y-2 px-2 w-full"
     >
@@ -202,10 +280,10 @@
             <Plus size={18} strokeWidth={2.5} />
         </button>
 
-        <!-- Рендерим живой список чатов из сокета Elixir -->
         {#if $appState && $appState.chats_list}
             {#each $appState.chats_list as chat (chat.id)}
-                <Chat {chat} />
+                <!-- Добавлен обработчик события long press -->
+                <Chat {chat} on:chatLongPress={handleChatLongPress} />
             {/each}
             {#if isLoadingMore}
                 <div class="w-full text-center py-4 text-xs text-slate-500 animate-pulse">
@@ -217,20 +295,32 @@
         {/if}
     </div>
 
+    <!-- Существующие модалки -->
     <AddCategoryModal bind:isOpen={isModalOpen} on:add={handleAddCategory} />
     <AddChatModal bind:isOpen={isNewChatModalOpen} />
+
+    <!-- НОВАЯ МОДАЛКА КОНТЕКСТНОГО МЕНЮ -->
+    <ChatContextMenu
+            bind:isOpen={isContextMenuOpen}
+            chatTitle={contextMenuChatTitle}
+            actions={contextMenuActions}
+    />
+    <ChatsFoldersModal
+            bind:isOpen={isFoldersModalOpen}
+            chatId={folderModalChatId}
+            chatTitle={folderModalChatTitle}
+    />
+
 </div>
 
-
 <style>
-    /* Легкий глянец иконкам */
     .shadow-inner {
         box-shadow: inset 0 2px 4px rgba(255,255,255,0.2), 0 4px 10px rgba(0,0,0,0.3);
     }
-    .scrollbar-hide::-webkit-scrollbar {
+    .scrollbar-none::-webkit-scrollbar {
         display: none;
     }
-    .scrollbar-hide {
+    .scrollbar-none {
         -ms-overflow-style: none;
         scrollbar-width: none;
     }

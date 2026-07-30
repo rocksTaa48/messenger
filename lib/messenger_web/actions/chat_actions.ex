@@ -154,6 +154,36 @@ defmodule MessengerWeb.Actions.ChatActions do
     end
   end
 
+  def handle_in("click_delete_chat", payload, socket) do
+    current_user = socket.assigns.current_user
+    group_id = Map.get(payload, "group_id")
+    chat = Map.get(payload, "chat_id")
+    Chats.remove_chat(chat, current_user.id)
+
+    chats =
+      if group_id do
+        Chats.list_user_chats(current_user.id, options: %{"group_id" => group_id})
+      else
+        Chats.list_user_chats(current_user.id)
+      end
+
+    formatted_chats =
+      case chats do
+        {:error, _} -> []
+        chts -> Enum.map(chts, &Serializer.chat_serialize/1)
+      end
+
+    new_state =
+      socket.assigns.state
+
+      |> Map.put("group_id", group_id)
+      |> Map.put("chats_list", formatted_chats)
+
+    push(socket, "sync", new_state)
+    {:reply, :ok, assign(socket, :state, new_state)}
+  end
+
+
 
   @doc"""
   SHOW_GROUP_CHATS: Функция 'chat:click_go_to_group' показывает чаты конкретной группы
