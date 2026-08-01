@@ -23,6 +23,9 @@
         profile => profile.variant === activeTab
     );
 
+    $: activeCategoryId = $appState.nav_context.params?.group_id || null
+
+
     function close() {
         isOpen = false;
         selectedModelId = '';
@@ -35,7 +38,8 @@
 
         appState.send("chat:click_submit", {
             ai_profile_id: selectedModelId,
-            system_prompt: systemPrompt
+            system_prompt: systemPrompt,
+            group_id: activeCategoryId,
         });
 
         close();

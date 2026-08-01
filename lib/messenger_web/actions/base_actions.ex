@@ -17,8 +17,17 @@ defmodule MessengerWeb.Actions.BaseActions do
     # 2. СМОТРИМ, КАКОЙ ТИП ДАННЫХ У GROUP_ID (String, Integer или nil)
     IO.inspect(group_id, label: "🔍 [CONVERTED] ИЗВЛЕЧЕННЫЙ GROUP_ID")
     IO.inspect(is_binary(group_id), label: "❓ ЯВЛЯЕТСЯ ЛИ СТРОКОЙ")
+
+    options = case group_id do
+      "All" -> %{}
+      nil   -> %{}
+      id    -> %{"group_id" => id}
+    end
+
     updated_chats = Chats.list_user_chats(socket.assigns.current_user.id, options: %{"group_id" => group_id})
     formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
+    has_more = length(formatted_chats) == 15
+
     IO.inspect(payload, label: "\n📥 [LOG FROM FRONTEND]")
 
     new_state =
@@ -26,6 +35,7 @@ defmodule MessengerWeb.Actions.BaseActions do
 
       |> Map.put("chats_list", formatted_chats)
       |> Map.put("group_id", group_id)
+      |> Map.put("has_more_chats", has_more)
       |> Map.delete("active_chat") # Уходим из чата — чистим память от тяжелых сообщений
 
     push(socket, "sync", new_state)

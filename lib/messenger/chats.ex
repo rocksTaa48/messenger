@@ -131,11 +131,12 @@ defmodule Messenger.Chats do
   @doc"""
   Функция Инициализирующая первое создание чата, запись в БД как Чата так и первое его сообщение с пометкой 'system'
   """
-  def create_chat_with_prompt(user_id, ai_profile_id, model_name, title, system_prompt) do
+  def create_chat_with_prompt(user_id, ai_profile_id, model_name, title, group_id, system_prompt) do
     Multi.new()
     # 1: Создаем чат со всеми обязательными полями
     |> Multi.insert(:chat, Chat.changeset(%Chat{}, %{
       "user_id" => user_id,
+      "group_id" => group_id,
       "ai_profile_id" => String.to_integer(to_string(ai_profile_id)),
       "title" => title,
       "model_name" => model_name

@@ -58,6 +58,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   """
   def handle_in("click_submit", payload, socket) do
     current_user = socket.assigns.current_user
+    group_id = Map.get(payload, "group_id")
     ai_profile_id = Map.get(payload, "ai_profile_id")
     system_prompt = Map.get(payload, "system_prompt")
 
@@ -86,12 +87,13 @@ defmodule MessengerWeb.Actions.ChatActions do
           profile.id,
           profile.model,
           generated_title,
+          group_id,
           final_prompt
         )
 
         case db_result do
           {:ok, %{chat: new_chat, system_message: system_message}} ->
-            updated_chats = Chats.list_user_chats(current_user.id)
+            updated_chats = Chats.list_user_chats(current_user.id, options: %{"group_id" => group_id})
             formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
 
             new_state =
@@ -118,9 +120,16 @@ defmodule MessengerWeb.Actions.ChatActions do
   Это функция пагинации, при скролинге и долистывании до таргета, с фронта прилетает запрос, после которого мы отдаем
   еще одну страницу чатов, что убережет нас от подгрузки тысяч чатов за раз, что уронит фронт.
   """
-  def handle_in("load_more_chats", _payload, socket) do
+  def handle_in("load_more_chats", payload, socket) do
     current_user = socket.assigns.current_user
     current_chats_list = socket.assigns.state["chats_list"]
+    group_id = Map.get(payload, "group_id")
+
+    options = case group_id do
+      "All" -> %{}
+      nil -> %{}
+      id -> %{"group_id" => id}
+    end
 
     case List.last(current_chats_list) do
       nil ->
@@ -131,7 +140,7 @@ defmodule MessengerWeb.Actions.ChatActions do
         cursor = last_chat["cursor_timestamp"]
 
         # Вызываем контекст (limit = 15)
-        next_chats = Chats.list_user_chats(current_user.id, 15, cursor)
+        next_chats = Chats.list_user_chats(current_user.id, limit: 15, before_cursor: cursor, options: options)
         formatted_next = Enum.map(next_chats, &Serializer.chat_serialize/1)
 
         if Enum.empty?(formatted_next) do

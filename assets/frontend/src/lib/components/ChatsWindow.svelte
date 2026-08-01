@@ -23,6 +23,9 @@
         appState.send("chat:click_new");
     }
 
+    $: activeCategoryId = $appState.nav_context.params?.group_id || 'All'
+
+
     let isLoadingMore = false;
     function handleScroll(e: Event) {
         const target = e.target as HTMLElement;
@@ -30,15 +33,13 @@
 
         if (isBottom && $appState.has_more_chats && !isLoadingMore) {
             isLoadingMore = true;
-            appState.send("chat:load_more_chats");
+            appState.send("chat:load_more_chats", {group_id: activeCategoryId});
         }
     }
 
     $: if ($appState?.chats_list) {
         isLoadingMore = false;
     }
-
-    $: activeCategoryId = $appState.nav_context.params?.group_id || 'All'
 
     let isSearchOpen = false;
     let searchQuery = "";
@@ -138,6 +139,8 @@
                 isDanger: true,
                 onClick: () => {
                     if (confirm('Вы уверены, что хотите удалить этот чат? Это действие нельзя отменить.')) {
+                        // Пока тут реализована система с отдачей от бэка стейта, мне пока так спокойнее
+                        // на бэк я отдаю group_id или если это all то ничего, соответственно отдадуться все чаты
                         const payload = activeCategoryId !== 'All'
                             ? { chat_id: chat.id, group_id: activeCategoryId }
                             : { chat_id: chat.id };
@@ -282,7 +285,7 @@
 
         {#if $appState && $appState.chats_list}
             {#each $appState.chats_list as chat (chat.id)}
-                <!-- Добавлен обработчик события long press -->
+                <!-- обработчик события long press -->
                 <Chat {chat} on:chatLongPress={handleChatLongPress} />
             {/each}
             {#if isLoadingMore}
@@ -295,7 +298,7 @@
         {/if}
     </div>
 
-    <!-- Существующие модалки -->
+    <!-- Модалки -->
     <AddCategoryModal bind:isOpen={isModalOpen} on:add={handleAddCategory} />
     <AddChatModal bind:isOpen={isNewChatModalOpen} />
 
