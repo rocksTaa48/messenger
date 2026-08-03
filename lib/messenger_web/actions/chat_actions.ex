@@ -115,6 +115,30 @@ defmodule MessengerWeb.Actions.ChatActions do
     end
   end
 
+  @doc"""
+  UPDATE_CHAT: Функция обновляет чат, меняем название чата :UPDATE_TITLE
+  """
+  def handle_in("click_update_chat", %{"chat_id" => chat_id, "title" => title, "action" => "update_title"}, socket) do
+    current_user = socket.assigns.current_user
+    chat = Chats.get_chat(current_user.id, chat_id)
+    case Chats.update_chat(chat_id, current_user.id, %{title: title}) do
+      {:ok, _chat} ->
+        updated_chats = Chats.list_user_chats(current_user.id, options: %{"group_id" => chat.group_id,})
+        formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
+        new_state = socket.assigns.state
+
+                    |> Map.put("chats_list", formatted_chats)
+
+        # Шлем обновленный монолит-стейт во фронтенд
+        push(socket, "sync", new_state)
+
+        # Сохраняем обновленное состояние в процессе сокета
+        {:reply, :ok, assign(socket, :state, new_state)}
+      {:error, _changeset} ->
+        {:reply, {:error, %{reason: "failed_to_update_group"}}, socket}
+    end
+  end
+
 
   @doc """
   Это функция пагинации, при скролинге и долистывании до таргета, с фронта прилетает запрос, после которого мы отдаем
@@ -250,7 +274,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   @doc"""
   UPDATE_CHAT_GROUP: Функция обновляет группу для чатов, меняем название :UPDATE_TITLE
   """
-  def handle_in("click_update_chat_group", %{"group_id" => group_id, "title" => title}, socket) do
+  def handle_in("click_update_group", %{"group_id" => group_id, "title" => title, "action" => "update_title"}, socket) do
     current_user = socket.assigns.current_user
 
     case Chats.update_group(group_id, current_user.id, %{title: title}) do
@@ -316,6 +340,31 @@ defmodule MessengerWeb.Actions.ChatActions do
         {:reply, :ok, assign(socket, :state, new_state)}
       {:error, _changeset} ->
         {:reply, {:error, %{reason: "failed_to_remove_chat_from_group"}}, socket}
+    end
+  end
+
+  @doc"""
+  REMOVE GROUP: Функция удаляет группу :REMOVE GROUP
+  """
+  def handle_in("click_remove_group", %{"group_id" => group_id, "action" => "remove"}, socket) do
+    current_user = socket.assigns.current_user
+
+    case Chats.remove_group(group_id, current_user.id) do
+      {:ok, _group} ->
+        updated_groups = Chats.list_user_groups(current_user.id)
+        formatted_groups = Enum.map(updated_groups, &Serializer.group_serialize/1)
+        new_state = socket.assigns.state
+
+                    |> Map.put("groups", formatted_groups )
+                    |> Map.put("deleted_group_id", group_id)
+
+        # Шлем обновленный монолит-стейт во фронтенд
+        push(socket, "sync", new_state)
+
+        # Сохраняем обновленное состояние в процессе сокета
+        {:reply, :ok, assign(socket, :state, new_state)}
+      {:error, _changeset} ->
+        {:reply, {:error, %{reason: "failed_to_remove_group"}}, socket}
     end
   end
 

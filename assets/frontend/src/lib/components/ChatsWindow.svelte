@@ -7,6 +7,8 @@
     import ChatsFoldersModal from './ChatsFoldersModal.svelte';
     import { createEventDispatcher } from 'svelte';
     import { appState } from '../../stores/socketStore';
+    import { longPress } from '../actions/longPress';
+    import RenameModal from './RenameModal.svelte'
     import WebApp from "@twa-dev/sdk";
 
     const dispatch = createEventDispatcher<{ selectChat: any }>();
@@ -77,10 +79,11 @@
         };
     }
 
-    // ЛОГИКА КОНТЕКСТНОГО МЕНЮ
+    // Секция КОНТЕКСТНОГО МЕНЮ ДЛЯ КОНКРЕТНОГО ЧАТА
     let isContextMenuOpen = false;
     let contextMenuChatTitle = '';
     let contextMenuActions: any[] = [];
+    let wasChatLongPress = false;
 
     function showContextMenu(chat: any) {
         // Haptic при появлении меню
@@ -129,7 +132,16 @@
                 icon: Pencil,
                 onClick: () => {
                     console.log('Rename chat:', chat.id);
-                    // appState.send("chat:rename_prompt", { chat_id: chat.id })
+                    isGroupContextMenuOpen = false;
+
+                    // Настраиваем и открываем модалку переименования
+                    renameItemId = chat.id.toString();
+                    renameCurrentTitle = chat.title;
+                    renameEventKey = "chat_id";
+                    renameModalTitle = 'Переименовать чат';
+                    renameEventType = 'chat:click_update_chat';
+                    renameEventCode = "update_title";
+                    isRenameModalOpen = true;
                 }
             },
             {
@@ -160,6 +172,108 @@
         showContextMenu(chat);
     }
 
+    // Секция КОНТЕКСТНОЕ МЕНЮ ДЛЯ ПАПОК ЧАТОВ
+
+    let isGroupContextMenuOpen = false;
+    let groupContextMenuTitle = '';
+    let groupContextMenuActions: any[] = [];
+
+    $: if (!isGroupContextMenuOpen) wasGroupLongPress = false;
+    $: if (!isContextMenuOpen) wasChatLongPress = false;
+
+    // Флаг для защиты от перехода в папку после долгого нажатия
+    let wasGroupLongPress = false;
+
+    function handleGroupLongPress(event: CustomEvent, group: any) {
+        wasGroupLongPress = true; // Блокируем последующий клик
+
+        if (WebApp.HapticFeedback) WebApp.HapticFeedback.impactOccurred('medium');
+
+        groupContextMenuTitle = group.title || 'Папка';
+
+        groupContextMenuActions = [
+            {
+                id: 'rename',
+                label: 'Переименовать',
+                icon: Pencil,
+                onClick: () => {
+                    isGroupContextMenuOpen = false;
+
+                    // Настраиваем и открываем модалку переименования
+                    renameItemId = group.id.toString();
+                    renameCurrentTitle = group.title;
+                    renameEventKey = "group_id";
+                    renameModalTitle = 'Переименовать папку';
+                    renameEventType = 'chat:click_update_group';
+                    renameEventCode = "update_title";
+                    isRenameModalOpen = true;
+                }
+            },
+            {
+                id: 'delete',
+                label: 'Удалить папку',
+                icon: Trash2,
+                isDanger: true,
+                onClick: () => {
+                    if (confirm(`Удалить папку "${group.title}"? Чаты не удалятся, а вернутся в "All".`)) {
+                        const isCurrentGroup = activeCategoryId.toString() === group.id.toString();
+
+                        // Отправляем запрос на удаление
+                        appState.send("chat:click_remove_group", { group_id: group.id, action: "remove" });
+
+                        // Если удаляем current группу, оптимистично переключаемся в 'All'
+                        if (isCurrentGroup) {
+                            appState.goTo({ screen: 'chats' });
+                        }
+
+                        isGroupContextMenuOpen = false;
+                    }
+                }
+            }
+        ];
+
+        isGroupContextMenuOpen = true;
+    }
+
+    function handleGroupClick(group: any) {
+        // Если только что был long press, игнорируем клик и сбрасываем флаг
+        if (wasGroupLongPress) {
+            wasGroupLongPress = false;
+            return;
+        }
+
+        // Обычный быстрый клик — навигация
+        appState.goTo({
+            screen: 'chats',
+            params: { group_id: group.id.toString() }
+        });
+    }
+
+    // Реактивно скроллим активную вкладку при любом изменении списка групп
+    $: if ($appState.groups && activeCategoryId !== 'All') {
+        // Небольшая задержка, чтобы DOM успел перерисоваться
+        setTimeout(() => {
+            const activeButton = document.querySelector(`[data-group-id="${activeCategoryId}"]`);
+            if (activeButton) {
+                activeButton.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'nearest',
+                    inline: 'center'
+                });
+            }
+        }, 50);
+    }
+
+    // Переименование
+
+    let isRenameModalOpen = false;
+    let renameItemId: string | null = null;
+    let renameCurrentTitle = '';
+    let renameModalTitle = 'Переименовать папку';
+    let renameEventType: string;
+    let renameEventCode: string;
+    let renameEventKey: string;
+
 </script>
 
 <div class="flex flex-col h-full w-full bg-[#0f0f0f] rounded-[24px] p-2 text-white font-sans border border-white/5 shadow-2xl overflow-hidden">
@@ -172,10 +286,10 @@
             {#if !isSearchOpen}
                 <button
                         on:click={() => isModalOpen = true}
-                        class="flex-shrink-0 flex items-center justify-center w-10 h-10 text-gray-400 hover:text-[#2481cc]
+                        class="w-10 h-10 text-gray-400 hover:text-[#2481cc]
                  transition-colors border-b-2 border-transparent pb-1 transition-transform active:scale-95"
                 >
-                    <Folder size={22} />
+                    <Plus size={22} />
                 </button>
             {:else}
                 <div class="w-10"></div>
@@ -228,15 +342,15 @@
             </button>
         </div>
 
-        <!-- ЛЕНТА КАТЕГОРИЙ -->
+        <!-- ЛЕНТА ПАПОК ЧАТОВ -->
         <div class="flex items-center w-full gap-3 px-4 mb-2 border-b border-gray-100 dark:border-[#101921]">
-            <div class="flex items-center gap-6 overflow-x-auto whitespace-nowrap scrollbar-none flex-1 h-10">
-
+            <div class="flex items-center gap-6 overflow-x-auto whitespace-nowrap scrollbar-none flex-1 h-10 touch-pan-x">
+                <!-- КНОПКА ALL (системная, без long press) -->
                 <button
                         class="h-full px-1 text-xs font-semibold tracking-wide transition-all relative flex items-center justify-center pb-1 border-b-2
-            {activeCategoryId === 'All'
-                ? 'border-[#2481cc] text-[#2481cc] dark:text-[#52a6e7]'
-                : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}"
+                        {activeCategoryId === 'All'
+                            ? 'border-[#2481cc] text-[#2481cc] dark:text-[#52a6e7]'
+                            : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}"
                         on:click={() => appState.goTo({ screen: 'chats' })}
                 >
                     All
@@ -245,16 +359,19 @@
                     {/if}
                 </button>
 
+                <!-- ДИНАМИЧЕСКИЕ ГРУППЫ прикручен long press -->
                 {#if $appState && $appState.groups}
                     {#each $appState.groups as group (group.id)}
                         {@const isActive = activeCategoryId.toString() === group.id.toString()}
 
-                        <button use:scrollActiveIntoView={isActive}
-                                class="h-full px-1 text-xs font-semibold tracking-wide transition-all relative flex items-center justify-center pb-1 border-b-2
+                        <button data-group-id={group.id}
+                                use:longPress={{ duration: 500, callback: (e) => handleGroupLongPress(e, group) }}
+                                use:scrollActiveIntoView={isActive}
+                                on:click={() => handleGroupClick(group)}
+                                class="h-full px-1 text-xs font-semibold tracking-wide transition-all relative flex items-center justify-center pb-1 border-b-2 select-none touch-pa
                                 {isActive
                                 ? 'border-[#2481cc] text-[#2481cc] dark:text-[#52a6e7]'
                                 : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}"
-                                on:click={() => appState.goTo({ screen: 'chats', params: { group_id: group.id.toString() } })}
                         >
                             {group.title}
 
@@ -302,16 +419,33 @@
     <AddCategoryModal bind:isOpen={isModalOpen} on:add={handleAddCategory} />
     <AddChatModal bind:isOpen={isNewChatModalOpen} />
 
-    <!-- НОВАЯ МОДАЛКА КОНТЕКСТНОГО МЕНЮ -->
+    <!-- Модалка контекстного меню для конкретного чата -->
     <ChatContextMenu
             bind:isOpen={isContextMenuOpen}
             chatTitle={contextMenuChatTitle}
             actions={contextMenuActions}
     />
+    <!-- Модалка контекстного меню для конкретного чата, с выбором перемещения в папку -->
     <ChatsFoldersModal
             bind:isOpen={isFoldersModalOpen}
             chatId={folderModalChatId}
             chatTitle={folderModalChatTitle}
+    />
+    <!-- Модалка контекстного меню для конкретной папки чатов -->
+    <ChatContextMenu
+            bind:isOpen={isGroupContextMenuOpen}
+            chatTitle={groupContextMenuTitle}
+            actions={groupContextMenuActions}
+    />
+    <!-- Модалка контекстного меню для переименования -->
+    <RenameModal
+            bind:isOpen={isRenameModalOpen}
+            itemId={renameItemId}
+            currentTitle={renameCurrentTitle}
+            modalTitle={renameModalTitle}
+            eventType={renameEventType}
+            eventCode={renameEventCode}
+            itemKey= {renameEventKey}
     />
 
 </div>

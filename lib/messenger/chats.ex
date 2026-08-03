@@ -227,4 +227,12 @@ defmodule Messenger.Chats do
     end
   end
 
+  # REMOVE GROUP
+  def remove_group(group_id, user_id) do
+    case Repo.get_by(Group, id: group_id, user_id: user_id) do
+      nil -> {:error, :not_found}
+      group -> Repo.delete(group)
+    end
+  end
+
 end
