@@ -10,7 +10,10 @@ defmodule Messenger.AiProfiles.AiProfile do
     field :api_key, Messenger.EncryptedString
     field :base_url, :string
     field :config, :map, default: %{}
+
     belongs_to :user, Messenger.Accounts.User
+    has_many :chats, Messenger.Chats.Chat
+
 
     timestamps(type: :utc_datetime)
   end

@@ -53,8 +53,8 @@
 
     <!-- Сценарий 3: Полный коннект -->
   {:else}
-    <!-- Скрываем отступы футера, если мы внутри чата (inside_chat) или настроек, если это нужно -->
-    <div class="w-full flex-1 flex flex-col min-h-0 px-2 pt-1 {currentScreen === 'inside_chat' ? 'pb-2' : 'pb-24'}">
+    <!-- Скрываем отступы футера, если мы внутри чата (inside_chat) или настроек, если это нужно (было 'pb-2' : 'pb-24') -->
+    <div class="w-full flex-1 flex flex-col min-h-0 px-2 pt-1 {currentScreen === 'inside_chat' ? 'pb-2' : 'pb-2'}">
 
       <!-- Индикатор живого real-time сокета -->
       <span class="w-2 h-2 bg-emerald-400 rounded-full animate-ping absolute top-2 right-2"></span>

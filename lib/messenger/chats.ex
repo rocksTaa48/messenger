@@ -13,7 +13,7 @@ defmodule Messenger.Chats do
 
   @doc """
   Функция get_ai_context это контекст для AI:
-  - Если 1-е сообщение имеет роль "system" -> оно всегда идет головой + N последних сообщений
+  - Если 1-е сообщение имеет роль "system" -> оно всегда идет головой + N последних сообщений для 'живого' контекста
   - Если 1-го системного сообщения нет -> отдаются последние N сообщений
   """
   def get_ai_context(chat_id) do
@@ -27,14 +27,14 @@ defmodule Messenger.Chats do
 
       |> Repo.one()
 
-    # 2) Вытаскиваем хвост из последних 10 сообщений диалог user и assistant
+    # 2) Вытаскиваем хвост из последних 20 сообщений диалог user и assistant
     recent_messages =
       Message
       |> where(chat_id: ^chat_id)
       |> where([m], m.role in ["user", "assistant"]) # Исключаем system, защита от дублирования
 
       |> order_by(desc: :inserted_at)
-      |> limit(10)
+      |> limit(20)
       |> Repo.all()
 
       |> Enum.reverse() # Разворачиваем хвост в хронологическом порядке
@@ -54,6 +54,18 @@ defmodule Messenger.Chats do
         # Если без промпта, отдаем только последние сообщения диалога
         formatted_tail
     end
+  end
+
+  @doc """
+  Функция create_ai_summary это создание суммаризированного контекста для AI:
+  """
+  def create_ai_summary(chat_id) do
+  end
+
+  @doc """
+  Функция update_ai_summary это обновление суммаризированного контекста для AI:
+  """
+  def update_ai_summary(chat_id) do
   end
 
   @doc"""
@@ -233,6 +245,23 @@ defmodule Messenger.Chats do
       nil -> {:error, :not_found}
       group -> Repo.delete(group)
     end
+  end
+
+  @doc"""
+  Это участок работы с сообщениями (messages)
+  """
+  def create_message(attrs) do
+    %Message{}
+
+    |> Message.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def create_assistant_message(attrs) do
+    %Message{}
+
+    |> Message.changeset(attrs)
+    |> Repo.insert()
   end
 
 end

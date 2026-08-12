@@ -1,12 +1,15 @@
 <script lang="ts">
-    import { Bot, ImageIcon, MessageSquare, Sparkles } from 'lucide-svelte';
+    import { Bot, ImageIcon, BrainCircuit, Sparkles } from 'lucide-svelte';
     import { longPress } from '../../actions/longPress';
     import { createEventDispatcher } from 'svelte';
     // Импортируем наш стор
     import { appState } from '../../../stores/socketStore';
+    import Icons from './Icons.svelte'
 
     // Принимаем объект чата сверху от родителя
     export let chat: any;
+
+    $: aiProfile = $appState.ai_profiles.find(p => String(p.id) === String(chat.ai_profile_id))
 
     const dispatch = createEventDispatcher();
 
@@ -15,7 +18,7 @@
         'bot': Bot,
         'image': ImageIcon,
         'sparkles': Sparkles,
-        'default': MessageSquare
+        'default': BrainCircuit
     };
 
     // Выбираем иконку
@@ -41,16 +44,21 @@
 >
 
     <!-- Иконка чата (Аватарка) -->
-    <div class="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 {chat.icon_color || 'text-[#2481cc] bg-[#2481cc]/10'}">
-        <svelte:component this={currentIcon} size={24} />
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 {aiProfile?.color || 'bg-slate-600'}">
+        {#if aiProfile}
+            <Icons {...{ [aiProfile.provider]: true }} size={20} />
+        {:else}
+            <!-- Если данные еще не пришли из сокета, покажется красивый лоадер -->
+            <div class="w-6 h-6 rounded-full bg-slate-500 animate-pulse"></div>
+        {/if}
     </div>
 
     <!-- Текстовый блок (Название и последнее сообщение) -->
     <div class="flex-1 min-w-0">
         <div class="flex justify-between items-baseline mb-1">
-            <h3 class="text-sm font-bold text-white truncate pr-2">
-                {chat.theme}
-            </h3>
+            <p class="text-sm font-extralight text-white truncate pr-2">
+                {chat.title}
+            </p>
             <span class="text-[10px] text-gray-500 font-medium whitespace-nowrap">
         {chat.id}
       </span>
@@ -63,7 +71,9 @@
     <!-- Правый блок: Статус и счетчик непрочитанных -->
     <div class="flex flex-col items-end justify-center flex-shrink-0 min-w-[20px]">
         {#if chat.status === 'unread' && chat.unread_count > 0}
-      <span class="bg-[#2481cc] text-white text-[10px] font-bold rounded-full h-4.5 min-w-[18px] flex items-center justify-center px-1 animate-pulse">
+      <span class="bg-[#2481cc] text-white text-[10px] font-bold rounded-full h-4.5 min-w-[18px] flex items-center
+      justify-center px-1 animate-pulse"
+      >
         {chat.unread_count}
       </span>
         {:else}

@@ -62,6 +62,12 @@ defmodule MessengerWeb.Actions.ChatActions do
     ai_profile_id = Map.get(payload, "ai_profile_id")
     system_prompt = Map.get(payload, "system_prompt")
 
+    options = case group_id do
+      "All" -> %{}
+      nil -> %{}
+      id -> %{"group_id" => id}
+    end
+
     final_prompt =
       case String.trim(system_prompt) do
         "" -> "Ты опытный и вежливый персональный помощник."
@@ -93,8 +99,9 @@ defmodule MessengerWeb.Actions.ChatActions do
 
         case db_result do
           {:ok, %{chat: new_chat, system_message: system_message}} ->
-            updated_chats = Chats.list_user_chats(current_user.id, options: %{"group_id" => group_id})
+            updated_chats = Chats.list_user_chats(current_user.id, options: options)
             formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
+            has_more = length(formatted_chats) == 15
 
             new_state =
               socket.assigns.state
@@ -104,6 +111,7 @@ defmodule MessengerWeb.Actions.ChatActions do
                 "id" => to_string(new_chat.id),
                 "ai_profile_id" => to_string(profile.id),
               })
+              |> Map.put("has_more_chats", has_more)
               |> Map.delete("ai_profiles")
 
             push(socket, "sync", new_state)
@@ -121,12 +129,22 @@ defmodule MessengerWeb.Actions.ChatActions do
   def handle_in("click_update_chat", %{"chat_id" => chat_id, "title" => title, "action" => "update_title"}, socket) do
     current_user = socket.assigns.current_user
     chat = Chats.get_chat(current_user.id, chat_id)
+    group_id = chat.group_id
+
+    options = case group_id do
+      "All" -> %{}
+      nil -> %{}
+      id -> %{"group_id" => id}
+    end
+
     case Chats.update_chat(chat_id, current_user.id, %{title: title}) do
       {:ok, _chat} ->
-        updated_chats = Chats.list_user_chats(current_user.id, options: %{"group_id" => chat.group_id,})
+        updated_chats = Chats.list_user_chats(current_user.id, options: options)
         formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
+        has_more = length(formatted_chats) == 15
         new_state = socket.assigns.state
 
+                    |> Map.put("has_more_chats", has_more)
                     |> Map.put("chats_list", formatted_chats)
 
         # Шлем обновленный монолит-стейт во фронтенд
@@ -187,17 +205,24 @@ defmodule MessengerWeb.Actions.ChatActions do
     end
   end
 
+  # DELETE CHAT
   def handle_in("click_delete_chat", payload, socket) do
     current_user = socket.assigns.current_user
     group_id = Map.get(payload, "group_id")
     chat = Map.get(payload, "chat_id")
     Chats.remove_chat(chat, current_user.id)
 
+    options = case group_id do
+      "All" -> %{}
+      nil -> %{}
+      id -> %{"group_id" => id}
+    end
+
     chats =
       if group_id do
-        Chats.list_user_chats(current_user.id, options: %{"group_id" => group_id})
+        Chats.list_user_chats(current_user.id, options: options)
       else
-        Chats.list_user_chats(current_user.id)
+        Chats.list_user_chats(current_user.id, options: options)
       end
 
     formatted_chats =
@@ -206,9 +231,12 @@ defmodule MessengerWeb.Actions.ChatActions do
         chts -> Enum.map(chts, &Serializer.chat_serialize/1)
       end
 
+    has_more = length(formatted_chats) == 15
+
     new_state =
       socket.assigns.state
 
+      |> Map.put("has_more_chats", has_more)
       |> Map.put("group_id", group_id)
       |> Map.put("chats_list", formatted_chats)
 
@@ -216,7 +244,9 @@ defmodule MessengerWeb.Actions.ChatActions do
     {:reply, :ok, assign(socket, :state, new_state)}
   end
 
-
+  @doc"""
+  ---------------------ПОДРАЗДЕЛ ОПЕРАЦИЙ С ГРУППАМИ (ПАПКАМИ) ЧАТОВ----------------------------
+  """
 
   @doc"""
   SHOW_GROUP_CHATS: Функция 'chat:click_go_to_group' показывает чаты конкретной группы
@@ -365,6 +395,76 @@ defmodule MessengerWeb.Actions.ChatActions do
         {:reply, :ok, assign(socket, :state, new_state)}
       {:error, _changeset} ->
         {:reply, {:error, %{reason: "failed_to_remove_group"}}, socket}
+    end
+  end
+
+  @doc"""
+  ---------------------ПОДРАЗДЕЛ ОПЕРАЦИЙ С СООБЩЕНИЯМИ ЧАТОВ----------------------------
+  """
+
+  # SEND MESSAGE
+  def handle_in("click_send_message", %{"chat_id" => chat_id, "content" => content}, socket) do
+    current_user = socket.assigns.current_user
+
+    case Chats.create_message(%{chat_id: chat_id, content: content, role: "user"}) do
+        {:ok, user_message} ->
+          formatted_message = Enum.map(user_message, &Serializer.message_serialize/1)
+
+          new_state = socket.assigns.state
+                      |> Map.put("messages", formatted_message )
+          push(socket, "sync", new_state)
+
+          # Сразу же запускаю джобу
+          Task.start_link(fn ->
+            generate_and_stream_ai_response(socket, chat_id, user_message)
+          end)
+
+          # Сохраняем обновленное состояние в процессе сокета
+          {:reply, :ok, assign(socket, :state, new_state)}
+      {:error, _changeset} ->
+        {:reply, {:error, %{reason: "failed_to_send_message"}}, socket}
+    end
+
+
+  end
+
+  # Получение кусочков ответа от ИИ и формирование этого в полный ответ для отдачи в БД
+  defp generate_and_stream_ai_response(socket, chat_id, user_message) do
+    # Собираем контекст (System prompt + Summary + Raw tail)
+    context = Chats.build_llm_context(chat_id)
+
+    # Получаем профиль AI (модель, api key, etc)
+    ai_profile = AiProfiles.get_profile_for_chat(chat_id)
+
+    # Вызываем ReqLLM
+    # max_tokens: 1500 пока такое ограничение
+    stream = ReqLLM.chat(ai_profile, context, stream: true, max_tokens: 1500)
+
+    # Собираем ответ по кусочкам
+    full_response =
+    stream
+    |> Enum.reduce("", fn %{text: text}, acc ->
+      # Пушим каждый кусочек на фронт для стриминга
+      push(socket, "chat:message_chunk", %{chat_id: chat_id, text: text})
+      acc <> text
+    end)
+
+    # Сохраняем полный ответ от ассистента в БД
+    case Chats.create_message(%{ chat_id: chat_id, role: "assistant", content: full_response}) do
+      {:ok, ai_message} ->
+        formatted_message = Enum.map(ai_message, &Serializer.message_serialize/1)
+
+        new_state = socket.assigns.state
+                    |> Map.put("messages", formatted_message )
+        push(socket, "sync", new_state)
+
+        # Сохраняем обновленное состояние в процессе сокета
+        {:reply, :ok, assign(socket, :state, new_state)}
+      {:error, _changeset} ->
+        {:reply, {:error, %{reason: "failed_to_send_message"}}, socket}
+
+        Oban.insert(CheckSummarizationJob.new(%{chat_id: chat_id}))
+        :ok
     end
   end
 

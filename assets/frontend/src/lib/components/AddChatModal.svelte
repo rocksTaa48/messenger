@@ -124,7 +124,7 @@
                                 <!-- Список моделей -->
                                 <div class="relative overflow-hidden w-full flex-1">
                                     {#key activeTab}
-                                        <!-- 🆕 Заменили fly на fade. Двойная анимация (fly внутри fly) всегда дает дерганье. Fade мгновенный и плавный. -->
+                                        <!-- Заменил fly на fade плавный. -->
                                         <div in:fade={{ duration: 150 }} out:fade={{ duration: 100 }}
                                              class="grid grid-cols-1 gap-2 w-full h-full content-start"
                                         >

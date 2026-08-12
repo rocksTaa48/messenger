@@ -44,6 +44,7 @@ defmodule Messenger.Serializer do
       "body" => "Нет сообщений",
       "model" => chat.model_name || "Нет модели",
       "group_id" => chat.group_id || nil,
+      "ai_profile_id" => chat.ai_profile_id || nil,
       "cursor_timestamp" => DateTime.to_iso8601(chat.inserted_at)
       # "status" => if(chat.has_unread, do: "unread", else: "read"),
       # "unread_count" => chat.unread_count || 0,

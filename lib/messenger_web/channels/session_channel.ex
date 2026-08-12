@@ -17,11 +17,13 @@ defmodule MessengerWeb.SessionChannel do
     current_user = socket.assigns.current_user
     groups = Chats.list_user_groups(current_user.id)
     chats = Chats.list_user_chats(current_user.id)
+    ai_profiles = AiProfiles.list_user_ai_profiles(current_user.id)
     formatted_groups = Enum.map(groups, &Serializer.group_serialize/1)
     formatted_chats = Enum.map(chats, &Serializer.chat_serialize/1)
+    formated_profiles = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
 
     Phoenix.PubSub.subscribe(Messenger.PubSub, "user:#{current_user.id}:lobby")
-    # Собираем единое Дерево Стейта, это то что полетит на фронт, все данные, важно попозже добавить ДЕЛЬТУ
+    # Собираем единое Дерево Стейта, это то что полетит на фронт, все данные, мжно попозже добавить ДЕЛЬТУ
     # Что бы не слать весь стейт заново, придумать методы отправки только точечных изменений $append $delete $prepend
     initial_tree_state = %{
       "user" => %{
@@ -34,6 +36,7 @@ defmodule MessengerWeb.SessionChannel do
       },
       "groups" => formatted_groups,
       "chats_list" => formatted_chats,
+      "ai_profiles" => formated_profiles,
       "has_more_chats" => length(formatted_chats) == 15,
       "active_chat" => nil
       # "settings" => %{"theme" => "dark", "lang" => "ru"}

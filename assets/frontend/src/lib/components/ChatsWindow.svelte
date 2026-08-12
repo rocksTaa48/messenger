@@ -403,7 +403,9 @@
         {#if $appState && $appState.chats_list}
             {#each $appState.chats_list as chat (chat.id)}
                 <!-- обработчик события long press -->
-                <Chat {chat} on:chatLongPress={handleChatLongPress} />
+                <Chat {chat}
+                      on:chatLongPress={handleChatLongPress}
+                />
             {/each}
             {#if isLoadingMore}
                 <div class="w-full text-center py-4 text-xs text-slate-500 animate-pulse">

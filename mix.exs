@@ -70,6 +70,7 @@ defmodule Messenger.MixProject do
       {:ecto_sql, "~> 3.13.5"},
       {:bcrypt_elixir, "~> 3.0"},
       {:cloak_ecto, "~> 1.3"},
+      {:req_llm, "~> 1.19"},
     ]
   end
 
