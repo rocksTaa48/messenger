@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { Search, X, Plus, Folder, FolderX, Trash2, Pencil, Pin } from 'lucide-svelte';
+    import { Search, X, Plus, Folder, FolderX, Trash2, Pencil, Pin, PinOff } from 'lucide-svelte';
     import AddCategoryModal from './AddCategoryModal.svelte';
     import AddChatModal from "./AddChatModal.svelte";
     import Chat from "./partials/Chat.svelte";
@@ -93,6 +93,7 @@
 
         const isOnSpecificFolder = activeCategoryId && activeCategoryId !== 'All';
 
+
         contextMenuActions = [
             {
                 id: 'folder',
@@ -119,11 +120,19 @@
             },
             {
                 id: 'pin',
-                label: 'Закрепить',
-                icon: Pin,
+                label: chat.is_pinned ? 'Открепить' : 'Закрепить',
+                icon: chat.is_pinned ? PinOff : Pin,
+                isDanger: chat.is_pinned, // Красная кнопка, если уже закреплен
                 onClick: () => {
-                    console.log('Pin chat:', chat.id);
-                    // appState.send("chat:pin", { chat_id: chat.id })
+                    console.log(chat.is_pinned ? 'Unpinning chat:' : 'Pinning chat:', chat.id);
+
+                    // Отправляем универсальный тоггл на умный бэкенд
+                    appState.send("chat:click_pinned_toggle_chat", {
+                        chat_id: chat.id?.toString(),
+                        pinned_toggle: true
+                    });
+
+                    isContextMenuOpen = false;
                 }
             },
             {

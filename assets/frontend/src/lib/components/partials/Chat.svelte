@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { Bot, ImageIcon, BrainCircuit, Sparkles } from 'lucide-svelte';
     import { longPress } from '../../actions/longPress';
     import { createEventDispatcher } from 'svelte';
     // Импортируем наш стор
@@ -12,17 +11,6 @@
     $: aiProfile = $appState.ai_profiles.find(p => String(p.id) === String(chat.ai_profile_id))
 
     const dispatch = createEventDispatcher();
-
-    // Мапим строку с бэкенда на живые иконки Lucide
-    const iconMap: Record<string, any> = {
-        'bot': Bot,
-        'image': ImageIcon,
-        'sparkles': Sparkles,
-        'default': BrainCircuit
-    };
-
-    // Выбираем иконку
-    $: currentIcon = iconMap[chat.icon_type] || iconMap['default'];
 
     function handleLongPress(event: CustomEvent) {
         dispatch('chatLongPress', { chat, originalEvent: event.detail.originalEvent });

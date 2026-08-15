@@ -6,6 +6,8 @@ defmodule Messenger.Chats.Group do
     field :title, :string
     belongs_to :user, Messenger.Accounts.User
     has_many :chats, Messenger.Chats.Chat
+    has_many :pinned_chats, Messenger.Chats.PinnedChat
+
 
     timestamps(type: :utc_datetime)
   end

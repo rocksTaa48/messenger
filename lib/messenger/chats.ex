@@ -1,8 +1,9 @@
 defmodule Messenger.Chats do
+
   import Ecto.Query
   alias Ecto.Multi
   alias Messenger.Repo
-  alias Messenger.Chats.{Chat, Message, Group}
+  alias Messenger.Chats.{Chat, Message, Group, PinnedChat}
 
   @doc"""
   Функция достает все сообщения из текущего чата пользователя
@@ -77,16 +78,66 @@ defmodule Messenger.Chats do
     before_cursor = Keyword.get(opts, :before_cursor)
     options = Keyword.get(opts, :options, %{})
 
-    Chat
+    group_id =
+      case options do
+        %{"group_id" => id} when not is_nil(id) -> id
+        %{group_id: id} when not is_nil(id) -> id
+        _ -> Keyword.get(opts, :group_id)
+      end
 
-    |> where([c], c.user_id == ^user_id)
-    |> filter_by_group(user_id, options)
-    |> filter_by_cursor(before_cursor)
+    # 1. Получаем закрепленные чаты (только для первой страницы)
+    pinned_chats = if is_nil(before_cursor) do
+      get_pinned_chats(user_id, group_id)
+    else
+      []
+    end
 
-    |> order_by([c], desc: c.inserted_at)
-    |> limit(^limit)
-    |> Repo.all()
+    pinned_ids = Enum.map(pinned_chats, & &1.id)
+
+    # 2. Получаем обычные чаты и исключаем из них закрепленные
+    query = Chat
+            |> where([c], c.user_id == ^user_id)
+            |> filter_by_group(user_id, options)
+            |> filter_by_cursor(before_cursor)
+            |> exclude_pinned_chats(pinned_ids)
+            |> order_by([c], desc: c.inserted_at)
+            |> limit(^limit)
+
+    tail_chats = Repo.all(query)
+
+    # 3. На лету маркируем чаты. Мы пишем признак в АТОМНЫЙ ключ :is_pinned.
+    # Так мы сохраняем структуры в целостности для вашего сериализатора.
+    marked_pinned = Enum.map(pinned_chats, &Map.put(&1, :is_pinned, true))
+    marked_tail = Enum.map(tail_chats, &Map.put(&1, :is_pinned, false))
+
+    # Склеиваем: сначала закрепленные в их порядке, затем свежие обычные
+    marked_pinned ++ marked_tail
   end
+
+
+  # Получение закрепленных чатов
+  defp get_pinned_chats(user_id, group_id) do
+    # Сортируем по p.inserted_at (порядок закрепления), но если нужно по алфавиту или обновлению — меняйте тут
+    query = from p in PinnedChat,
+                 where: p.user_id == ^user_id,
+                 join: c in assoc(p, :chat),
+                 order_by: [asc: p.inserted_at],
+                 limit: 5,
+                 select: c
+
+    if is_nil(group_id) do
+      Repo.all(from p in query, where: is_nil(p.group_id))
+    else
+      Repo.all(from p in query, where: p.group_id == ^group_id)
+    end
+  end
+
+  # Исключение закрепленных по ID
+  defp exclude_pinned_chats(query, []), do: query
+  defp exclude_pinned_chats(query, pinned_ids) do
+    from c in query, where: c.id not in ^pinned_ids
+  end
+
 
   # Если group_id передан в строковых значениях с фронта
   defp filter_by_group(query, user_id, %{"group_id" => group_id}) when not is_nil(group_id) do
@@ -178,6 +229,25 @@ defmodule Messenger.Chats do
     end
   end
 
+  # Приколачивает чат в закрепе
+  def update_chat_toggle(user_id, chat_id, group_id, %{"pinned_toggle" => true}) do
+    search_result =
+      if is_nil(group_id) do
+        Repo.get_by(PinnedChat, user_id: user_id, chat_id: chat_id)
+      else
+        Repo.get_by(PinnedChat, user_id: user_id, chat_id: chat_id, group_id: group_id)
+      end
+    case search_result do
+      nil ->
+        toggle_attrs = %{user_id: user_id, chat_id: chat_id, group_id: group_id}
+        %PinnedChat{}
+        |> PinnedChat.changeset(toggle_attrs)
+        |> Repo.insert()
+      pin -> # Если нашли — удаляем
+        Repo.delete(pin)
+    end
+  end
+
   def remove_chat(chat_id, user_id) do
     case Repo.get_by(Chat, id: chat_id, user_id: user_id) do
       nil -> {:error, :not_found}
@@ -186,7 +256,7 @@ defmodule Messenger.Chats do
   end
 
   @doc"""
-  Это участок работы с группами
+  -------------------------------------------Это участок работы с группами--------------------------------------
   """
   # CREATE_GROUP
   def create_group(attrs) do
@@ -248,7 +318,7 @@ defmodule Messenger.Chats do
   end
 
   @doc"""
-  Это участок работы с сообщениями (messages)
+  ----------------------------------------Это участок работы с сообщениями (messages)-------------------------------
   """
   def create_message(attrs) do
     %Message{}

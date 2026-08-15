@@ -13,6 +13,7 @@ defmodule Messenger.Accounts.User do
 
     has_many :groups, Messenger.Chats.Group
     has_many :chats, Messenger.Chats.Chat
+    has_many :pinned_chats, Messenger.Chats.PinnedChat
 
     timestamps(type: :utc_datetime)
   end

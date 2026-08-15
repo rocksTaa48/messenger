@@ -8,9 +8,8 @@ defmodule MessengerWeb.Actions.ChatActions do
   @doc"""
   SHOW: Функция 'click_open' открывает чат и показывает нам его содержимое
   """
-  def handle_in("click_open", payload, socket) do
+  def handle_in("click_open", %{"chat_id" => chat_id}, socket) do
     current_user = socket.assigns.current_user
-    chat_id = Map.get(payload, "chat_id")
     chat = Chats.get_chat(current_user.id, chat_id)
     messages = Chats.get_chat_messages(chat_id, current_user.id)
     serialized_messages =
@@ -70,7 +69,7 @@ defmodule MessengerWeb.Actions.ChatActions do
 
     final_prompt =
       case String.trim(system_prompt) do
-        "" -> "Ты опытный и вежливый персональный помощник."
+        "" -> "Ты опытный и вежливый персональный помощник, будь краток и говори по делу. Не галлюцинируй."
         valid_prompt -> valid_prompt
       end
 
@@ -153,7 +152,41 @@ defmodule MessengerWeb.Actions.ChatActions do
         # Сохраняем обновленное состояние в процессе сокета
         {:reply, :ok, assign(socket, :state, new_state)}
       {:error, _changeset} ->
-        {:reply, {:error, %{reason: "failed_to_update_group"}}, socket}
+        {:reply, {:error, %{reason: "failed_to_update_chat"}}, socket}
+    end
+  end
+####ВЕРНИ PAYLOAD и рзбирай мапу внутри метода Map.get
+  @doc"""
+  UPDATE_CHAT: Функция обновляет чат, закрепляем чат :PINNED
+  """
+  def handle_in("click_pinned_toggle_chat", %{"chat_id" => chat_id, "group_id" => group_id, "pinned_toggle" => true}, socket) do
+    current_user = socket.assigns.current_user
+    chat = Chats.get_chat(current_user.id, chat_id)
+    group_id = chat.group_id
+
+    options = case group_id do
+      "All" -> %{}
+      nil -> %{}
+      id -> %{"group_id" => id}
+    end
+
+    case Chats.update_chat_toggle(current_user.id, chat_id, group_id, %{"pinned_toggle" => true}) do
+      {:ok, _chat} ->
+        updated_chats = Chats.list_user_chats(current_user.id, options: options)
+        formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
+        has_more = length(formatted_chats) == 15
+        new_state = socket.assigns.state
+
+                    |> Map.put("has_more_chats", has_more)
+                    |> Map.put("chats_list", formatted_chats)
+
+        # Шлем обновленный монолит-стейт во фронтенд
+        push(socket, "sync", new_state)
+
+        # Сохраняем обновленное состояние в процессе сокета
+        {:reply, :ok, assign(socket, :state, new_state)}
+      {:error, _changeset} ->
+        {:reply, {:error, %{reason: "failed_to_update_chat"}}, socket}
     end
   end
 
@@ -162,10 +195,9 @@ defmodule MessengerWeb.Actions.ChatActions do
   Это функция пагинации, при скролинге и долистывании до таргета, с фронта прилетает запрос, после которого мы отдаем
   еще одну страницу чатов, что убережет нас от подгрузки тысяч чатов за раз, что уронит фронт.
   """
-  def handle_in("load_more_chats", payload, socket) do
+  def handle_in("load_more_chats", %{"group_id" => group_id}, socket) do
     current_user = socket.assigns.current_user
     current_chats_list = socket.assigns.state["chats_list"]
-    group_id = Map.get(payload, "group_id")
 
     options = case group_id do
       "All" -> %{}
@@ -206,11 +238,10 @@ defmodule MessengerWeb.Actions.ChatActions do
   end
 
   # DELETE CHAT
-  def handle_in("click_delete_chat", payload, socket) do
+  def handle_in("click_delete_chat", %{"group_id" => group_id, "chat_id" => chat_id}, socket) do
     current_user = socket.assigns.current_user
-    group_id = Map.get(payload, "group_id")
-    chat = Map.get(payload, "chat_id")
-    Chats.remove_chat(chat, current_user.id)
+
+    Chats.remove_chat(chat_id, current_user.id)
 
     options = case group_id do
       "All" -> %{}
@@ -218,12 +249,7 @@ defmodule MessengerWeb.Actions.ChatActions do
       id -> %{"group_id" => id}
     end
 
-    chats =
-      if group_id do
-        Chats.list_user_chats(current_user.id, options: options)
-      else
-        Chats.list_user_chats(current_user.id, options: options)
-      end
+    chats = Chats.list_user_chats(current_user.id, options: options)
 
     formatted_chats =
       case chats do
@@ -251,9 +277,8 @@ defmodule MessengerWeb.Actions.ChatActions do
   @doc"""
   SHOW_GROUP_CHATS: Функция 'chat:click_go_to_group' показывает чаты конкретной группы
   """
-  def handle_in("click_go_to_group", payload, socket) do
+  def handle_in("click_go_to_group", %{"group_id" => group_id}, socket) do
     current_user = socket.assigns.current_user
-    group_id = Map.get(payload, "group_id")
     chats = Chats.list_user_chats(current_user.id, options: %{"group_id" => group_id})
 
     formatted_chats =
@@ -276,9 +301,8 @@ defmodule MessengerWeb.Actions.ChatActions do
   @doc"""
   CREATE_CHAT_GROUP: Функция 'chat:click_submit_chat_group' создаем группу для чатов
   """
-  def handle_in("click_submit_chat_group", payload, socket) do
+  def handle_in("click_submit_chat_group", %{"title" => title}, socket) do
     current_user = socket.assigns.current_user
-    title = Map.get(payload, "title")
 
     case Chats.create_group(%{user_id: current_user.id, title: title}) do
       {:ok, _new_group} ->
@@ -355,9 +379,15 @@ defmodule MessengerWeb.Actions.ChatActions do
   def handle_in("click_update_chat_group", %{"chat_id" => chat_id, "group_id" => group_id, "action" => "remove"}, socket) do
     current_user = socket.assigns.current_user
 
+    options = case group_id do
+      "All" -> %{}
+      nil -> %{}
+      id -> %{"group_id" => id}
+    end
+
     case Chats.remove_chat_from_group(chat_id, current_user.id) do
       {:ok, _group} ->
-        updated_chats = Chats.list_user_chats(current_user.id, options: %{"group_id" => group_id})
+        updated_chats = Chats.list_user_chats(current_user.id, options: options)
         formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
         new_state = socket.assigns.state
 
