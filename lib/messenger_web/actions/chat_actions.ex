@@ -6,7 +6,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   alias Messenger.Serializer
 
   @doc"""
-  SHOW: Функция 'click_open' открывает чат и показывает нам его содержимое
+  SHOW:               Функция 'click_open' открывает чат и показывает нам его содержимое
   """
   def handle_in("click_open", %{"chat_id" => chat_id}, socket) do
     current_user = socket.assigns.current_user
@@ -35,7 +35,7 @@ defmodule MessengerWeb.Actions.ChatActions do
 
 
   @doc"""
-  NEW: Функция 'click_new' подготавливает нам создание нового чата
+  NEW:                Функция 'click_new' подготавливает нам создание нового чата
   """
   def handle_in("click_new", _payload, socket) do
     current_user = socket.assigns.current_user
@@ -53,7 +53,7 @@ defmodule MessengerWeb.Actions.ChatActions do
 
 
   @doc"""
-  CREATE: Функция 'click_submit' создает - сохраняет в БД новый чат
+  CREATE:             Функция 'click_submit' создает - сохраняет в БД новый чат
   """
   def handle_in("click_submit", payload, socket) do
     current_user = socket.assigns.current_user
@@ -123,7 +123,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   end
 
   @doc"""
-  UPDATE_CHAT: Функция обновляет чат, меняем название чата :UPDATE_TITLE
+  UPDATE_CHAT:                Мультифункция обновляет чат
   """
   def handle_in("click_update_chat", payload, socket) do
 
@@ -225,7 +225,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   """
 
   @doc"""
-  SHOW_GROUP_CHATS: Функция 'chat:click_go_to_group' показывает чаты конкретной группы
+  SHOW_GROUP_CHATS:               Функция 'chat:click_go_to_group' показывает чаты конкретной группы
   """
   def handle_in("click_go_to_group", %{"group_id" => group_id}, socket) do
     current_user = socket.assigns.current_user
@@ -249,7 +249,7 @@ defmodule MessengerWeb.Actions.ChatActions do
 
 
   @doc"""
-  CREATE_CHAT_GROUP: Функция 'chat:click_submit_chat_group' создаем группу для чатов
+  CREATE_CHAT_GROUP:              Функция 'chat:click_submit_chat_group' создаем группу для чатов
   """
   def handle_in("click_submit_chat_group", %{"title" => title}, socket) do
     current_user = socket.assigns.current_user
@@ -276,7 +276,7 @@ defmodule MessengerWeb.Actions.ChatActions do
 
 
   @doc"""
-  UPDATE_CHAT_GROUP: Функция обновляет группу для чатов, меняем название :UPDATE_TITLE
+  UPDATE_CHAT_GROUP:              Функция обновляет группу для чатов, меняем название :UPDATE_TITLE
   """
   def handle_in("click_update_group", %{"group_id" => group_id, "title" => title, "action" => "update_title"}, socket) do
     current_user = socket.assigns.current_user
@@ -300,7 +300,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   end
 
   @doc"""
-  UPDATE_CHAT_GROUP: Функция обновляет группу, добавляя туда чат :ADD
+  UPDATE_CHAT_GROUP:              Функция обновляет группу, добавляя туда чат :ADD
   """
   def handle_in("click_update_chat_group", %{"chat_id" => chat_id, "group_id" => group_id, "action" => "add"}, socket) do
     current_user = socket.assigns.current_user
@@ -324,7 +324,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   end
 
   @doc"""
-  UPDATE_CHAT_GROUP: Функция обновляет группу, удаляя от туда чат :REMOVE
+  UPDATE_CHAT_GROUP:              Функция обновляет группу, удаляя от туда чат :REMOVE
   """
   def handle_in("click_update_chat_group", %{"chat_id" => chat_id, "group_id" => group_id, "action" => "remove"}, socket) do
     current_user = socket.assigns.current_user
@@ -354,7 +354,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   end
 
   @doc"""
-  REMOVE GROUP: Функция удаляет группу :REMOVE GROUP
+  REMOVE GROUP:               Функция удаляет группу :REMOVE GROUP
   """
   def handle_in("click_remove_group", %{"group_id" => group_id, "action" => "remove"}, socket) do
     current_user = socket.assigns.current_user

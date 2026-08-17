@@ -13,19 +13,27 @@ defmodule MessengerWeb.SessionChannel do
   которая потом обязательно будет ':chats, :messages, :settings etc' и потом можно будет утонуть в сторах
   на фронте, а так как я не силен во фронтенде, мне этой лишней работы не нужно.
   """
-  def join("session:lobby", _payload, socket) do
+  def join("session:lobby", payload, socket) do
     current_user = socket.assigns.current_user
-    groups = Chats.list_user_groups(current_user.id)
-    chats = Chats.list_user_chats(current_user.id)
-    ai_profiles = AiProfiles.list_user_ai_profiles(current_user.id)
-    formatted_groups = Enum.map(groups, &Serializer.group_serialize/1)
-    formatted_chats = Enum.map(chats, &Serializer.chat_serialize/1)
-    formated_profiles = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
+    # Извлекаем навигационный контекст, присланный фронтендом
+    # Если это самый первый вход (или пустой payload), дефолтимся на "chats", если же нет ---->
 
+    nav_context = Map.get(payload, "nav_context", %{"screen" => "chats"})
+    screen = Map.get(nav_context, "screen", "chats")
+    params = Map.get(nav_context, "params", %{})
+
+    # Базовые данные, нужные всегда, такие как - профиль, группы, список профилей ИИ, может еще чего.
+    groups = Chats.list_user_groups(current_user.id)
+    ai_profiles = AiProfiles.list_user_ai_profiles(current_user.id)
+
+    formatted_groups = Enum.map(groups, &Serializer.group_serialize/1)
+    formatted_profiles = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
+
+    # Подписываемся на изменения обязательно!
     Phoenix.PubSub.subscribe(Messenger.PubSub, "user:#{current_user.id}:lobby")
-    # Собираем единое Дерево Стейта, это то что полетит на фронт, все данные, мжно попозже добавить ДЕЛЬТУ
-    # Что бы не слать весь стейт заново, придумать методы отправки только точечных изменений $append $delete $prepend
-    initial_tree_state = %{
+
+    # Общая структура стейта передаваемого на фронт
+    base_state = %{
       "user" => %{
         "id" => current_user.id,
         "telegram_id" => current_user.telegram_id,
@@ -35,15 +43,73 @@ defmodule MessengerWeb.SessionChannel do
         "role" => current_user.role
       },
       "groups" => formatted_groups,
-      "chats_list" => formatted_chats,
-      "ai_profiles" => formated_profiles,
-      "has_more_chats" => length(formatted_chats) >= 15,
-      "active_chat" => nil
-      # "settings" => %{"theme" => "dark", "lang" => "ru"}
+      "ai_profiles" => formatted_profiles,
+      "settings" => %{"theme" => "dark", "lang" => "ru"} # если нужно
     }
+
+    # Здесь наполняем стейт !динамически! в зависимости от экрана восстановления
+    initial_tree_state = build_state_for_screen(screen, params, base_state, current_user.id)
+
     authorized_socket = assign(socket, :state, initial_tree_state)
     {:ok, initial_tree_state, authorized_socket}
   end
+
+  # --- Хелперы для сборки стейта под конкретный экран ---
+
+  # Если: Юзер был на экране списков чатов
+  defp build_state_for_screen("chats", params, base_state, user_id) do
+    group_id = Map.get(params, "group_id")
+
+    options = case group_id do
+      "All" -> %{}
+      nil   -> %{}
+      id    -> %{"group_id" => id}
+    end
+
+    chats = Chats.list_user_chats(user_id, options: options)
+    formatted_chats = Enum.map(chats, &Serializer.chat_serialize/1)
+
+    base_state
+    |> Map.put("chats_list", formatted_chats)
+    |> Map.put("has_more_chats", length(formatted_chats) >= 15)
+    |> Map.put("active_chat", nil)
+  end
+
+  # Если: Юзер был внутри конкретного чата, мы восстанавливаем его
+  defp build_state_for_screen("inside_chat", params, base_state, user_id) do
+    chat_id = Map.get(params, "chat_id")
+
+    # 1. Загружаем чаты (базовый список для боковой панели/фона все равно нужен)
+    chats = Chats.list_user_chats(user_id)
+    formatted_chats = Enum.map(chats, &Serializer.chat_serialize/1)
+
+    # 2. Загружаем данные САМОГО активного чата вместе с сообщениями
+    # Сюда подставьте ваш метод получения чата, например: Chats.get_active_chat_with_messages(chat_id)
+    active_chat_data = case Chats.get_chat_with_messages(chat_id) do
+      nil -> nil
+      chat -> Serializer.active_chat_serialize(chat) # Ваша сериализация активного чата
+    end
+
+    base_state
+    |> Map.put("chats_list", formatted_chats)
+    |> Map.put("has_more_chats", length(formatted_chats) >= 15)
+    |> Map.put("active_chat", active_chat_data)
+  end
+
+  # Если: Юзер был в настройках
+  defp build_state_for_screen("settings", _params, base_state, user_id) do
+    chats = Chats.list_user_chats(user_id)
+    formatted_chats = Enum.map(chats, &Serializer.chat_serialize/1)
+
+    base_state
+    |> Map.put("chats_list", formatted_chats)
+    |> Map.put("has_more_chats", length(formatted_chats) >= 15)
+    |> Map.put("active_chat", nil)
+    # Тут нужно будет дополнить специфичными данными настроек, когда дело дойдет!!!
+  end
+
+  # Фоллбек на случай непредвиденного экрана
+  defp build_state_for_screen(_, _params, base_state, user_id), do: build_state_for_screen("chats", %{}, base_state, user_id)
 
   # Все общие экшены перенаправляем в BaseActions
   def handle_in("base:" <> event, payload, socket) do
@@ -59,13 +125,6 @@ defmodule MessengerWeb.SessionChannel do
   def handle_in("user:" <> event, payload, socket) do
     UserActions.handle_in(event, payload, socket)
   end
-
-
-
-
-
-
-
 
 
 end

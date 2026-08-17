@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import { Socket, Channel } from 'phoenix';
 
 // 1) Узел навигации: четко описывает, где мы и с каким контекстом
@@ -11,7 +11,7 @@ export interface NavigationNode {
     };
 }
 
-// 2) Структура стейта приложения
+// 2) Базовая структура стейта приложения
 export interface AppState {
     status: 'connecting' | 'connected' | 'error';
 
@@ -42,7 +42,8 @@ const initialValue: AppState = {
     settings: { theme: 'dark', lang: 'ru' }
 };
 
-const { subscribe, update } = writable<AppState>(initialValue);
+const store = writable<AppState>(initialValue);
+const { subscribe, update } = store;
 
 let socket: Socket | null = null;
 let channel: Channel | null = null;
@@ -69,7 +70,18 @@ export const appState = {
         });
 
         socket.connect();
-        channel = socket.channel('session:lobby', {});
+
+        /**
+         * Передаем функцию.
+         * Phoenix выполняет эту функцию при каждом автоматическом переподключении.
+         * За счет get(store) мы всегда берем актуальный nav_context прямо из памяти фронтенда на момент реконнекта.
+         */
+        channel = socket.channel('session:lobby', () => {
+            const currentAppState = get(store);
+            return {
+                nav_context: currentAppState.nav_context
+            };
+        });
 
         // Когда Elixir присылает sync, мы обновляем ТОЛЬКО данные. Навигацию он не трогает.
         channel.on('sync', (serverState: Partial<Omit<AppState, 'nav_context' | 'nav_history' | 'status'>>) => {
@@ -82,23 +94,15 @@ export const appState = {
 
         channel.join()
             .receive('ok', (initialServerState: Partial<Omit<AppState, 'nav_context' | 'nav_history' | 'status'>>) => {
-                console.log('Авторизация в Elixir успешна!');
+                console.log('Авторизация и восстановление сессии в Elixir успешны!');
 
-                // 1. Сначала обновляем стейт
-                let currentNavContext: NavigationNode | null = null;
                 update(state => {
-                    currentNavContext = state.nav_context; // 👈 Сохраняем текущий контекст
                     return {
                         ...state,
-                        ...initialServerState,
+                        ...initialServerState, // Принимаем стейт, собранный под наш экран
                         status: 'connected'
                     };
                 });
-
-                // 2. Затем запрашиваем данные для текущего экрана (ВНЕ update)
-                if (currentNavContext) {
-                    this._requestDataForScreen(currentNavContext);
-                }
             })
             .receive('error', () => {
                 update(state => ({ ...state, status: 'error' }));
@@ -148,7 +152,7 @@ export const appState = {
         // Если это дубликат или пустой клик по той же вкладке — гасим функцию.
         if (isDuplicate) return;
 
-        // Шлем запрос на бэк
+        // Шлем запрос на бэк (при явном переходе пользователя — этот метод по-прежнему нужен)
         this._requestDataForScreen(target);
     },
 
@@ -192,5 +196,4 @@ export const appState = {
                 break;
         }
     }
-
 };

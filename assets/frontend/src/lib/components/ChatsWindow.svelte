@@ -313,7 +313,7 @@
     <!-- ЗАГОЛОВОК ОКНА -->
     <div class="px-2 pt-2 select-none">
         <!-- ВЕРХНЯЯ ПАНЕЛЬ: ЗАГОЛОВОК / ПОИСК -->
-        <div class="flex items-center justify-between mb-3 h-10">
+        <div class="flex items-center justify-between mb-2 h-10">
 
             {#if !isSearchOpen}
                 <button
@@ -423,7 +423,7 @@
         <button on:click={() => openCreateModal()}
                 class="w-full flex items-center justify-center gap-3 text-gray-400 hover:text-[#2481cc] hover:bg-white/[0.05]
            transition-all border border-dashed border-white/10 py-4
-           active:scale-95 bg-white/[0.02] rounded-[24px] font-semibold text-sm mb-4"
+           active:scale-95 bg-white/[0.02] rounded-[24px] font-semibold text-sm  mb-3 mt-1"
         >
             <span>New Chat</span>
             <Plus size={18} strokeWidth={2.5} />
