@@ -100,7 +100,7 @@ defmodule MessengerWeb.Actions.ChatActions do
           {:ok, %{chat: new_chat, system_message: system_message}} ->
             updated_chats = Chats.list_user_chats(current_user.id, options: options)
             formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
-            has_more = length(formatted_chats) == 15
+            has_more = length(formatted_chats) >= 15
 
             new_state =
               socket.assigns.state
@@ -125,68 +125,50 @@ defmodule MessengerWeb.Actions.ChatActions do
   @doc"""
   UPDATE_CHAT: Функция обновляет чат, меняем название чата :UPDATE_TITLE
   """
-  def handle_in("click_update_chat", %{"chat_id" => chat_id, "title" => title, "action" => "update_title"}, socket) do
-    current_user = socket.assigns.current_user
-    chat = Chats.get_chat(current_user.id, chat_id)
-    group_id = chat.group_id
+  def handle_in("click_update_chat", payload, socket) do
 
-    options = case group_id do
+    current_user = socket.assigns.current_user
+    action   = Map.get(payload, "action")
+    group_id_raw = Map.get(payload, "group_id")
+    chat_id = Map.get(payload, "chat_id")
+    title = Map.get(payload, "title")
+    chat = Chats.get_chat(current_user.id, chat_id)
+
+    options = case group_id_raw do
       "All" -> %{}
       nil -> %{}
       id -> %{"group_id" => id}
     end
 
-    case Chats.update_chat(chat_id, current_user.id, %{title: title}) do
-      {:ok, _chat} ->
+    group_id = if group_id_raw == "All", do: nil, else: group_id_raw
+
+
+    # Перебираем экшены для апдейта
+    action_result =
+      case action do
+        "update_title" -> Chats.update_chat(chat_id, current_user.id, %{"title" => title})
+        "toggle_pin"   -> Chats.update_chat_toggle(current_user.id, chat_id, group_id)
+        "delete"       -> Chats.remove_chat(chat_id, current_user.id)
+        unknown        -> {:error, "unknown_action"}
+      end
+
+    # Единый ответ для всех экшенов
+    case action_result do
+      {:ok, _} ->
         updated_chats = Chats.list_user_chats(current_user.id, options: options)
         formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
-        has_more = length(formatted_chats) == 15
-        new_state = socket.assigns.state
+        has_more = length(formatted_chats) >= 15
 
-                    |> Map.put("has_more_chats", has_more)
-                    |> Map.put("chats_list", formatted_chats)
+        new_state =
+          socket.assigns.state
+          |> Map.put("has_more_chats", has_more)
+          |> Map.put("chats_list", formatted_chats)
 
-        # Шлем обновленный монолит-стейт во фронтенд
         push(socket, "sync", new_state)
-
-        # Сохраняем обновленное состояние в процессе сокета
         {:reply, :ok, assign(socket, :state, new_state)}
-      {:error, _changeset} ->
-        {:reply, {:error, %{reason: "failed_to_update_chat"}}, socket}
-    end
-  end
-####ВЕРНИ PAYLOAD и рзбирай мапу внутри метода Map.get
-  @doc"""
-  UPDATE_CHAT: Функция обновляет чат, закрепляем чат :PINNED
-  """
-  def handle_in("click_pinned_toggle_chat", %{"chat_id" => chat_id, "group_id" => group_id, "pinned_toggle" => true}, socket) do
-    current_user = socket.assigns.current_user
-    chat = Chats.get_chat(current_user.id, chat_id)
-    group_id = chat.group_id
 
-    options = case group_id do
-      "All" -> %{}
-      nil -> %{}
-      id -> %{"group_id" => id}
-    end
-
-    case Chats.update_chat_toggle(current_user.id, chat_id, group_id, %{"pinned_toggle" => true}) do
-      {:ok, _chat} ->
-        updated_chats = Chats.list_user_chats(current_user.id, options: options)
-        formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
-        has_more = length(formatted_chats) == 15
-        new_state = socket.assigns.state
-
-                    |> Map.put("has_more_chats", has_more)
-                    |> Map.put("chats_list", formatted_chats)
-
-        # Шлем обновленный монолит-стейт во фронтенд
-        push(socket, "sync", new_state)
-
-        # Сохраняем обновленное состояние в процессе сокета
-        {:reply, :ok, assign(socket, :state, new_state)}
-      {:error, _changeset} ->
-        {:reply, {:error, %{reason: "failed_to_update_chat"}}, socket}
+      {:error, _reason} ->
+        {:reply, {:error, %{reason: "failed_to_execute_action"}}, socket}
     end
   end
 
@@ -195,9 +177,10 @@ defmodule MessengerWeb.Actions.ChatActions do
   Это функция пагинации, при скролинге и долистывании до таргета, с фронта прилетает запрос, после которого мы отдаем
   еще одну страницу чатов, что убережет нас от подгрузки тысяч чатов за раз, что уронит фронт.
   """
-  def handle_in("load_more_chats", %{"group_id" => group_id}, socket) do
+  def handle_in("load_more_chats", payload, socket) do
     current_user = socket.assigns.current_user
     current_chats_list = socket.assigns.state["chats_list"]
+    group_id = Map.get(payload, "group_id")
 
     options = case group_id do
       "All" -> %{}
@@ -228,46 +211,13 @@ defmodule MessengerWeb.Actions.ChatActions do
           new_state = socket.assigns.state
 
                       |> Map.put("chats_list", updated_chats_list)
-                      |> Map.put("has_more_chats", length(formatted_next) == 15)
+                      |> Map.put("has_more_chats", length(formatted_next) >= 15)
 
           # Синхронизируем фронтенд
           push(socket, "sync", new_state)
           {:reply, :ok, assign(socket, :state, new_state)}
         end
     end
-  end
-
-  # DELETE CHAT
-  def handle_in("click_delete_chat", %{"group_id" => group_id, "chat_id" => chat_id}, socket) do
-    current_user = socket.assigns.current_user
-
-    Chats.remove_chat(chat_id, current_user.id)
-
-    options = case group_id do
-      "All" -> %{}
-      nil -> %{}
-      id -> %{"group_id" => id}
-    end
-
-    chats = Chats.list_user_chats(current_user.id, options: options)
-
-    formatted_chats =
-      case chats do
-        {:error, _} -> []
-        chts -> Enum.map(chts, &Serializer.chat_serialize/1)
-      end
-
-    has_more = length(formatted_chats) == 15
-
-    new_state =
-      socket.assigns.state
-
-      |> Map.put("has_more_chats", has_more)
-      |> Map.put("group_id", group_id)
-      |> Map.put("chats_list", formatted_chats)
-
-    push(socket, "sync", new_state)
-    {:reply, :ok, assign(socket, :state, new_state)}
   end
 
   @doc"""

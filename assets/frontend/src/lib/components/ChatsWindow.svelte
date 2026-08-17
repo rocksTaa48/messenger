@@ -10,6 +10,7 @@
     import { longPress } from '../actions/longPress';
     import RenameModal from './RenameModal.svelte'
     import WebApp from "@twa-dev/sdk";
+    import {onMount, onDestroy} from "svelte";
 
     const dispatch = createEventDispatcher<{ selectChat: any }>();
 
@@ -29,18 +30,37 @@
 
 
     let isLoadingMore = false;
-    function handleScroll(e: Event) {
-        const target = e.target as HTMLElement;
-        const isBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 60;
-
-        if (isBottom && $appState.has_more_chats && !isLoadingMore) {
-            isLoadingMore = true;
-            appState.send("chat:load_more_chats", {group_id: activeCategoryId});
-        }
-    }
 
     $: if ($appState?.chats_list) {
         isLoadingMore = false;
+    }
+
+    let sentinelRef: HTMLDivElement;
+    let observer: IntersectionObserver;
+
+    // В onMount (если он есть) или создай новый onMount
+    onMount(() => {
+        observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && $appState?.has_more_chats && !isLoadingMore) {
+                    isLoadingMore = true;
+                    appState.send("chat:load_more_chats", {group_id: activeCategoryId});
+                }
+            },
+            {
+                rootMargin: '100px',
+                threshold: 0.1
+            }
+        );
+
+        return () => {
+            if (observer) observer.disconnect();
+        };
+    });
+
+    // Обновляем observer при изменении sentinel
+    $: if (sentinelRef && $appState?.has_more_chats) {
+        observer?.observe(sentinelRef);
     }
 
     let isSearchOpen = false;
@@ -127,9 +147,10 @@
                     console.log(chat.is_pinned ? 'Unpinning chat:' : 'Pinning chat:', chat.id);
 
                     // Отправляем универсальный тоггл на умный бэкенд
-                    appState.send("chat:click_pinned_toggle_chat", {
+                    appState.send("chat:click_update_chat", {
                         chat_id: chat.id?.toString(),
-                        pinned_toggle: true
+                        group_id: activeCategoryId || null,
+                        action: "toggle_pin"
                     });
 
                     isContextMenuOpen = false;
@@ -150,6 +171,7 @@
                     renameModalTitle = 'Переименовать чат';
                     renameEventType = 'chat:click_update_chat';
                     renameEventCode = "update_title";
+                    renameExtraParams = { group_id: activeCategoryId?.toString() || "All" };
                     isRenameModalOpen = true;
                 }
             },
@@ -163,11 +185,11 @@
                         // Пока тут реализована система с отдачей от бэка стейта, мне пока так спокойнее
                         // на бэк я отдаю group_id или если это all то ничего, соответственно отдадуться все чаты
                         const payload = activeCategoryId !== 'All'
-                            ? { chat_id: chat.id, group_id: activeCategoryId }
-                            : { chat_id: chat.id };
+                            ? { chat_id: chat.id, group_id: activeCategoryId, action: "delete" }
+                            : { chat_id: chat.id, action: "delete"};
 
                         console.log('Delete chat:', chat.id);
-                        appState.send("chat:click_delete_chat", payload)
+                        appState.send("chat:click_update_chat", payload)
                     }
                 }
             }
@@ -282,6 +304,7 @@
     let renameEventType: string;
     let renameEventCode: string;
     let renameEventKey: string;
+    let renameExtraParams: Record<string, any> = {};
 
 </script>
 
@@ -396,10 +419,7 @@
 
     </div>
 
-    <div on:scroll={handleScroll}
-         class="flex-1 overflow-y-auto pb-24 scrollbar-none space-y-2 px-2 w-full"
-    >
-
+    <div class="flex-1 overflow-y-auto pb-24 scrollbar-none space-y-2 px-2 w-full">
         <button on:click={() => openCreateModal()}
                 class="w-full flex items-center justify-center gap-3 text-gray-400 hover:text-[#2481cc] hover:bg-white/[0.05]
            transition-all border border-dashed border-white/10 py-4
@@ -411,14 +431,28 @@
 
         {#if $appState && $appState.chats_list}
             {#each $appState.chats_list as chat (chat.id)}
-                <!-- обработчик события long press -->
-                <Chat {chat}
-                      on:chatLongPress={handleChatLongPress}
-                />
+                <Chat {chat} on:chatLongPress={handleChatLongPress} />
             {/each}
-            {#if isLoadingMore}
-                <div class="w-full text-center py-4 text-xs text-slate-500 animate-pulse">
-                    Подгружаем старые переписки...
+
+            <!-- Триггер для подгрузки -->
+            {#if $appState?.has_more_chats}
+                <div
+                        bind:this={sentinelRef}
+                        class="w-full h-2"
+                >
+                    {#if isLoadingMore}
+                        <div class="w-full text-center py-4 text-xs text-slate-500 animate-pulse">
+                            Подгружаем старые чаты...
+                        </div>
+                    {:else}
+                        <div class="w-full text-center py-4 text-[10px] text-gray-600">
+                            ⬇️ Прокрутите для загрузки
+                        </div>
+                    {/if}
+                </div>
+            {:else if $appState.chats_list.length > 0}
+                <div class="w-full text-center py-4 text-[10px] text-gray-600">
+                    📦 Все чаты загружены
                 </div>
             {/if}
         {:else}
@@ -457,6 +491,7 @@
             eventType={renameEventType}
             eventCode={renameEventCode}
             itemKey= {renameEventKey}
+            extraParams={renameExtraParams}
     />
 
 </div>

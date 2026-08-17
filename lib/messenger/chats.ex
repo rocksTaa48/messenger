@@ -85,34 +85,35 @@ defmodule Messenger.Chats do
         _ -> Keyword.get(opts, :group_id)
       end
 
-    # 1. Получаем закрепленные чаты (только для первой страницы)
-    pinned_chats = if is_nil(before_cursor) do
-      get_pinned_chats(user_id, group_id)
-    else
-      []
-    end
+    all_pinned_chats = get_pinned_chats(user_id, group_id)
+    pinned_ids = Enum.map(all_pinned_chats, & &1.id)
 
-    pinned_ids = Enum.map(pinned_chats, & &1.id)
-
-    # 2. Получаем обычные чаты и исключаем из них закрепленные
     query = Chat
             |> where([c], c.user_id == ^user_id)
             |> filter_by_group(user_id, options)
-            |> filter_by_cursor(before_cursor)
-            |> exclude_pinned_chats(pinned_ids)
+            |> filter_by_cursor(before_cursor) # Теперь тут безопасный кастинг строки
+            |> exclude_pinned_chats(pinned_ids) # Исключаем закрепы железно
             |> order_by([c], desc: c.inserted_at)
             |> limit(^limit)
 
     tail_chats = Repo.all(query)
 
-    # 3. На лету маркируем чаты. Мы пишем признак в АТОМНЫЙ ключ :is_pinned.
-    # Так мы сохраняем структуры в целостности для вашего сериализатора.
-    marked_pinned = Enum.map(pinned_chats, &Map.put(&1, :is_pinned, true))
-    marked_tail = Enum.map(tail_chats, &Map.put(&1, :is_pinned, false))
-
-    # Склеиваем: сначала закрепленные в их порядке, затем свежие обычные
-    marked_pinned ++ marked_tail
+    if is_nil(before_cursor) do
+      marked_pinned = Enum.map(all_pinned_chats, &Map.put(&1, :is_pinned, true))
+      marked_tail = Enum.map(tail_chats, &Map.put(&1, :is_pinned, false))
+      marked_pinned ++ marked_tail
+    else
+      # На последующих страницах возвращаем только свежую порцию обычных чатов
+      Enum.map(tail_chats, &Map.put(&1, :is_pinned, false))
+    end
   end
+
+  defp filter_by_cursor(query, before_cursor) when not is_nil(before_cursor) do
+    where(query, [c], c.inserted_at < type(^before_cursor, :utc_datetime))
+  end
+
+  defp filter_by_cursor(query, _), do: query
+
 
 
   # Получение закрепленных чатов
@@ -157,13 +158,6 @@ defmodule Messenger.Chats do
 
   # Если мапа пустая (%{}) или в ней нет нужного ключа
   defp filter_by_group(query, _user_id, _opts), do: query
-
-  # Фильтр по курсору
-  defp filter_by_cursor(query, before_cursor) when not is_nil(before_cursor) do
-    where(query, [c], c.inserted_at < ^before_cursor)
-  end
-
-  defp filter_by_cursor(query, _), do: query
 
 
 
@@ -230,7 +224,7 @@ defmodule Messenger.Chats do
   end
 
   # Приколачивает чат в закрепе
-  def update_chat_toggle(user_id, chat_id, group_id, %{"pinned_toggle" => true}) do
+  def update_chat_toggle(user_id, chat_id, group_id) do
     search_result =
       if is_nil(group_id) do
         Repo.get_by(PinnedChat, user_id: user_id, chat_id: chat_id)

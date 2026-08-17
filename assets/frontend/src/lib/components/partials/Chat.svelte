@@ -4,6 +4,7 @@
     // Импортируем наш стор
     import { appState } from '../../../stores/socketStore';
     import Icons from './Icons.svelte'
+    import {Pin} from 'lucide-svelte'
 
     // Принимаем объект чата сверху от родителя
     export let chat: any;
@@ -28,7 +29,7 @@
     }
   })}
         class="chat flex items-center gap-4 p-3.5 bg-white/[0.03] border border-white/5
-         rounded-[24px] hover:bg-white/[0.06] cursor-pointer transition-all active:scale-[0.99]"
+         rounded-[24px] hover:bg-white/[0.06] cursor-pointer transition-all active:scale-[0.99] relative"
 >
 
     <!-- Иконка чата (Аватарка) -->
@@ -56,8 +57,15 @@
         </p>
     </div>
 
+    <!-- Правый блок: Статус закреплен или нет -->
+    {#if chat.is_pinned}
+        <div class="absolute top-0 right-2 text-[#2481cc] text-sm">
+            📌
+        </div>
+    {/if}
+
     <!-- Правый блок: Статус и счетчик непрочитанных -->
-    <div class="flex flex-col items-end justify-center flex-shrink-0 min-w-[20px]">
+    <div class="absolute bottom-2 right-2 min-w-[20px]">
         {#if chat.status === 'unread' && chat.unread_count > 0}
       <span class="bg-[#2481cc] text-white text-[10px] font-bold rounded-full h-4.5 min-w-[18px] flex items-center
       justify-center px-1 animate-pulse"

@@ -37,7 +37,7 @@ defmodule MessengerWeb.SessionChannel do
       "groups" => formatted_groups,
       "chats_list" => formatted_chats,
       "ai_profiles" => formated_profiles,
-      "has_more_chats" => length(formatted_chats) == 15,
+      "has_more_chats" => length(formatted_chats) >= 15,
       "active_chat" => nil
       # "settings" => %{"theme" => "dark", "lang" => "ru"}
     }

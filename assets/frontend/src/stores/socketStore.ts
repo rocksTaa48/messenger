@@ -25,6 +25,7 @@ export interface AppState {
     ai_profiles: Array<{id: string; name: string; provider: string, model: string}>;
     groups: Array<{ id: string; title: string }>;
     active_chat: { id: string; messages: Array<{ id: number; text: string; group_id: number; sender: string }> } | null;
+    has_more_chats: boolean;
     settings: { theme: string; lang: string };
 }
 
@@ -37,6 +38,7 @@ const initialValue: AppState = {
     chats_list: [],
     groups: [],
     active_chat: null,
+    has_more_chats: false,
     settings: { theme: 'dark', lang: 'ru' }
 };
 
@@ -81,11 +83,22 @@ export const appState = {
         channel.join()
             .receive('ok', (initialServerState: Partial<Omit<AppState, 'nav_context' | 'nav_history' | 'status'>>) => {
                 console.log('Авторизация в Elixir успешна!');
-                update(state => ({
-                    ...state,
-                    ...initialServerState,
-                    status: 'connected'
-                }));
+
+                // 1. Сначала обновляем стейт
+                let currentNavContext: NavigationNode | null = null;
+                update(state => {
+                    currentNavContext = state.nav_context; // 👈 Сохраняем текущий контекст
+                    return {
+                        ...state,
+                        ...initialServerState,
+                        status: 'connected'
+                    };
+                });
+
+                // 2. Затем запрашиваем данные для текущего экрана (ВНЕ update)
+                if (currentNavContext) {
+                    this._requestDataForScreen(currentNavContext);
+                }
             })
             .receive('error', () => {
                 update(state => ({ ...state, status: 'error' }));

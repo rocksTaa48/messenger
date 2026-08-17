@@ -24,9 +24,9 @@ defmodule MessengerWeb.Actions.BaseActions do
       id    -> %{"group_id" => id}
     end
 
-    updated_chats = Chats.list_user_chats(socket.assigns.current_user.id, options: %{"group_id" => group_id})
+    updated_chats = Chats.list_user_chats(socket.assigns.current_user.id, options: options)
     formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
-    has_more = length(formatted_chats) == 15
+    has_more = length(formatted_chats) >= 15
 
     IO.inspect(payload, label: "\n📥 [LOG FROM FRONTEND]")
 

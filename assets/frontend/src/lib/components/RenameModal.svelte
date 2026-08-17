@@ -12,6 +12,8 @@
     export let eventType: string;         // Событие для отправки на бэк так же определяем заранее
     export let itemKey: string; // group_id chat_id сам ключ что именно мы меняем
     export let eventCode: string;
+    export let extraParams: Record<string, any> = {};
+
 
     let newTitle = '';
     let inputElement: HTMLInputElement;
@@ -49,7 +51,8 @@
         appState.send(eventType, {
             [itemKey]: itemId, // динамически
             title: trimmedTitle,
-            action: eventCode
+            action: eventCode,
+            ...extraParams
         });
 
         close();
