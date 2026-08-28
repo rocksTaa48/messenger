@@ -9,11 +9,8 @@ defmodule Messenger.Repo.Migrations.CreateAiProfiles do
       add :api_key, :binary, null: false
       add :base_url, :string
       add :config, :map, default: %{}
-      add :user_id, references(:users, on_delete: :delete_all)
 
       timestamps(type: :utc_datetime)
     end
-
-    create unique_index(:ai_profiles, [:user_id, :provider])
   end
 end

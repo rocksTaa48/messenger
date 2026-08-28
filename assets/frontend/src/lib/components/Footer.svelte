@@ -1,5 +1,5 @@
 <script>
-    import { Brain, MessageCircleMore, Settings2 } from 'lucide-svelte';
+    import { MessageCirclePlusIcon, MessageCircleMore, Settings2 } from 'lucide-svelte';
     import { createEventDispatcher } from "svelte";
     import WebApp from "@twa-dev/sdk";
 
@@ -10,12 +10,12 @@
     // Вкладки
     const tabs = [
         { label: 'Chats', icon: MessageCircleMore },
-        { label: 'Agents', icon: Brain },
+        { label: 'CreateChat', icon: MessageCirclePlusIcon },
         { label: 'Settings', icon: Settings2 }
     ];
 
     // Вкладки на которых мы скрываем футер, неважно есть они в массиве TABs или нет, скрываем
-    const hiddenTabs = ['Messenger', 'Agents', 'ProfileEdit', 'CryptoPayment'];
+    const hiddenTabs = ['Messenger', 'CreateChat', 'ProfileEdit', 'CryptoPayment'];
 
 
     function handleMenuClick() {
@@ -57,4 +57,5 @@
             </button>
         {/each}
     </div>
+
 </div>

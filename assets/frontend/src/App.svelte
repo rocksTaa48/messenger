@@ -27,9 +27,9 @@
   // Перехват кликов из Футера: теперь навигацией рулит клиент через goTo!
   function handleTabChange(e: CustomEvent<string>) {
     const targetTab = e.detail; // 'Chats', 'Agents', 'Settings'
-
+    // Здесь надо подумать! переход к созданию чата CreateChat! как это выполнить, модалкой или полноценным окном?
     if (targetTab === 'Chats') appState.goTo({ screen: 'chats' });
-    if (targetTab === 'Agents') appState.goTo({ screen: 'inside_chat', params: { chat_id: 'agents_lobby' } }); // Или как у вас устроен экран агентов
+    if (targetTab === 'CreateChat') appState.goTo({ screen: 'inside_chat', params: { chat_id: 'new_chat' } });
     if (targetTab === 'Settings') appState.goTo({ screen: 'settings' });
   }
 </script>

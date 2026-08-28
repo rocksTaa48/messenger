@@ -5,6 +5,15 @@ defmodule Messenger.Chats.Message do
   schema "messages" do
     field :role, :string
     field :content, :string
+    field :status, :string, default: "pending"
+    field :error, :string
+    field :tokens_prompt, :integer
+    field :tokens_completion, :integer
+    field :tokens_total, :integer
+    field :cost_prompt, :decimal
+    field :cost_completion, :decimal
+    field :cost_total, :decimal
+    field :metadata, :map, default: %{}
 
     belongs_to :chat, Messenger.Chats.Chat
 
@@ -17,7 +26,8 @@ defmodule Messenger.Chats.Message do
     |> cast(attrs, [:role, :content, :chat_id])
     |> validate_required([:role, :content, :chat_id])
     |> validate_inclusion(:role, ["system", "user", "assistant"])
-    |> validate_length(:content, min: 1, max: 1000)
+    |> validate_inclusion(:status, ["pending", "send", "error"])
+    |> validate_length(:content, min: 1, max: 2048)
     |> foreign_key_constraint(:chat_id)
   end
 end

@@ -9,10 +9,12 @@ Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
 
 Ready to run in production? Please [check our deployment guides](https://hexdocs.pm/phoenix/deployment.html).
 
-## Learn more
-
-* Official website: https://www.phoenixframework.org/
-* Guides: https://hexdocs.pm/phoenix/overview.html
-* Docs: https://hexdocs.pm/phoenix
-* Forum: https://elixirforum.com/c/phoenix-forum
-* Source: https://github.com/phoenixframework/phoenix
+## Общая информация
+Это чат между пользователем и AI внутри телеграм.
+В виде Telegram Mini App.
+Модели AI как и провайдеры получены от посредника, OpenRouter.
+Они не принадлежат пользователю. Пользователь может получать к ним доступ.\
+Как бесплатно с ограничениями, так и приоритетно, оплатив
+депозит. Тогда он получает доступ к большому списку моделей.
+Тарификация осуществляется в условных еденицах, для оплаты мощностей
+предоставленых OpenRouter. 
