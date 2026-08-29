@@ -20,9 +20,23 @@ export interface AppState {
     nav_history: NavigationNode[];                        // Стек пройденных экранов
 
     // Данные от бэкенда
-    user: { id: number; username: string; balance: number } | null;
-    chats_list: Array<{ id: string; title: string; unread: number; ai_profile_id: string, is_pinned: boolean; }>;
-    ai_profiles: Array<{id: string; name: string; provider: string, model: string}>;
+    user: { id: number; username: string; role: string; status: string; } | null;
+    chats_list: Array<{
+        id: string;
+        title: string;
+        unread: number;
+        ai_profile_id: string;
+        is_pinned: boolean;
+    }>;
+    ai_profiles: Array<{
+        id: string;
+        name: string;
+        provider: string;
+        model: string;
+        openrouter_model_id: string;
+        display_name: string;
+        display_description: string;
+    }>;
     groups: Array<{ id: string; title: string }>;
     active_chat: { id: string; messages: Array<{ id: number; text: string; group_id: number; sender: string }> } | null;
     has_more_chats: boolean;
@@ -189,7 +203,11 @@ export const appState = {
                 this.send('base:click_nav_chats', { group_id: node.params?.group_id }); // <-- Отправляемся в лобби чатов
                 break;
             case 'inside_chat':
-                this.send('chat:click_open', { chat_id: node.params?.chat_id }); // <-- Открываем чат
+                if (node.params?.chat_id) {
+                    this.send('chat:click_open', { chat_id: node.params.chat_id }); // <-- Открываем чат
+                } else {
+                    this.send('chat:click_new', {}); // // <-- Подготавливаем создание чата если не пришел chat_id
+                }
                 break;
             case 'settings':
                 this.send('user:get_settings');

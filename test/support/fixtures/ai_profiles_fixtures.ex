@@ -18,4 +18,23 @@ defmodule Messenger.AiProfilesFixtures do
 
     ai_profile
   end
+
+  @doc """
+  Generate a prompt.
+  """
+  def prompt_fixture(attrs \\ %{}) do
+    {:ok, prompt} =
+      attrs
+      |> Enum.into(%{
+        content: "some content",
+        description: "some description",
+        is_active: true,
+        metadata: %{},
+        name: "some name",
+        version: 42
+      })
+      |> Messenger.AiProfiles.create_prompt()
+
+    prompt
+  end
 end

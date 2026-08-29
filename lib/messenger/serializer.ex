@@ -26,13 +26,11 @@ defmodule Messenger.Serializer do
       "name" => ai_profile.name,
       "provider" => ai_profile.provider || "Без названия",
       "model" => ai_profile.model,
+      "openrouter_model_id" => ai_profile.openrouter_model_id || "Без модели",
+      "display_name" => ai_profile.display_name || "Без имени",
+      "display_description" => ai_profile.display_description || "Без описания",
+
       "timestamp" => DateTime.to_iso8601(ai_profile.inserted_at),
-      "variant" => if(ai_profile.user_id != nil, do: "personal", else: "global")
-      # "status" => if(chat.has_unread, do: "unread", else: "read"),
-      # "unread_count" => chat.unread_count || 0,
-      # Строковые алиасы для фронтенда, чтобы не тащить JS-классы через JSON
-      # "icon_type" => chat.bot_type || "default", # "bot", "image", "sparkles"
-      # "icon_color" => chat.ui_color || "text-[#2481cc] bg-[#2481cc]/10"
     }
   end
 

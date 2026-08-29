@@ -9,6 +9,7 @@ defmodule Messenger.Accounts.User do
     field :last_name, :string
     field :phone, :string
     field :role, :string
+    field :status, :string
     field :raw_data, :map
 
     has_many :groups, Messenger.Chats.Group
@@ -21,8 +22,8 @@ defmodule Messenger.Accounts.User do
   @doc false
   def changeset(user, attrs) do
     user
-    |> cast(attrs, [:telegram_id, :username, :first_name, :last_name, :phone, :role, :raw_data])
-    |> validate_required([:telegram_id, :role])
+    |> cast(attrs, [:telegram_id, :username, :first_name, :last_name, :phone, :role, :status, :raw_data])
+    |> validate_required([:telegram_id, :role, :status])
     |> unique_constraint(:telegram_id)
   end
 end

@@ -1,7 +1,6 @@
 <script lang="ts">
     import { Search, X, Plus, Folder, FolderX, Trash2, Pencil, Pin, PinOff } from 'lucide-svelte';
     import AddCategoryModal from './AddCategoryModal.svelte';
-    import AddChatModal from "./AddChatModal.svelte";
     import Chat from "./partials/Chat.svelte";
     import ChatContextMenu from './ChatContextMenu.svelte';
     import ChatsFoldersModal from './ChatsFoldersModal.svelte';
@@ -17,13 +16,6 @@
     function handleMenuClick() {
         if (WebApp.HapticFeedback) WebApp.HapticFeedback.impactOccurred('light');
         console.log('Menu clicked');
-    }
-
-    let isNewChatModalOpen = false;
-
-    function openCreateModal() {
-        isNewChatModalOpen = true;
-        appState.send("chat:click_new");
     }
 
     $: activeCategoryId = $appState.nav_context.params?.group_id || 'All'
@@ -420,15 +412,6 @@
     </div>
 
     <div class="flex-1 overflow-y-auto pb-24 scrollbar-none space-y-2 px-2 w-full">
-        <button on:click={() => openCreateModal()}
-                class="w-full flex items-center justify-center gap-3 text-gray-400 hover:text-[#2481cc] hover:bg-white/[0.05]
-           transition-all border border-dashed border-white/10 py-4
-           active:scale-95 bg-white/[0.02] rounded-[24px] font-semibold text-sm  mb-3 mt-1"
-        >
-            <span>New Chat</span>
-            <Plus size={18} strokeWidth={2.5} />
-        </button>
-
         {#if $appState && $appState.chats_list}
             {#each $appState.chats_list as chat (chat.id)}
                 <Chat {chat} on:chatLongPress={handleChatLongPress} />
@@ -460,9 +443,8 @@
         {/if}
     </div>
 
-    <!-- Модалки -->
+    <!-- Модалка добавления группы/папки -->
     <AddCategoryModal bind:isOpen={isModalOpen} on:add={handleAddCategory} />
-    <AddChatModal bind:isOpen={isNewChatModalOpen} />
 
     <!-- Модалка контекстного меню для конкретного чата -->
     <ChatContextMenu

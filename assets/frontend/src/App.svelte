@@ -29,7 +29,7 @@
     const targetTab = e.detail; // 'Chats', 'Agents', 'Settings'
     // Здесь надо подумать! переход к созданию чата CreateChat! как это выполнить, модалкой или полноценным окном?
     if (targetTab === 'Chats') appState.goTo({ screen: 'chats' });
-    if (targetTab === 'CreateChat') appState.goTo({ screen: 'inside_chat', params: { chat_id: 'new_chat' } });
+    if (targetTab === 'CreateChat') appState.goTo({ screen: 'inside_chat', params: {} });
     if (targetTab === 'Settings') appState.goTo({ screen: 'settings' });
   }
 </script>

@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount, tick } from 'svelte';
-    import { ChevronLeft, Paperclip, Mic, SendHorizontal, Play, FileImage } from 'lucide-svelte';
+    import { ChevronLeft, Paperclip, Mic, SendHorizontal, Settings, FileImage } from 'lucide-svelte';
     import { appState } from '../../stores/socketStore';
     import Message from "./partials/Message.svelte"
 
@@ -107,8 +107,8 @@
         </span>
         </div>
 
-        <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-[#2481cc] to-[#1d6fa0] text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
-            {chatName.substring(0, 2).toUpperCase()}
+        <div class="p-2 bg-white/5 rounded-xl text-gray-400 hover:text-white transition-colors flex items-center justify-center flex-shrink-0">
+            <Settings size={24} strokeWidth={2.5} />
         </div>
     </header>
 

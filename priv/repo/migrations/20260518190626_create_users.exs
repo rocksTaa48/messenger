@@ -9,6 +9,7 @@ defmodule Messenger.Repo.Migrations.CreateUsers do
       add :last_name, :string
       add :phone, :string
       add :role, :string, null: false, default: "pending"
+      add :status, :string, null: false, default: "free"
       add :raw_data, :jsonb
 
       timestamps(type: :utc_datetime)

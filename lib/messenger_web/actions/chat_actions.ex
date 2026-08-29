@@ -39,7 +39,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   """
   def handle_in("click_new", _payload, socket) do
     current_user = socket.assigns.current_user
-    ai_profiles = AiProfiles.list_user_ai_profiles(current_user.id)
+    ai_profiles = AiProfiles.list_ai_profiles(current_user.status)
     formated_profile = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
 
     # Дополняем дерево массивом ai_profiles
@@ -51,8 +51,78 @@ defmodule MessengerWeb.Actions.ChatActions do
     {:reply, :ok, assign(socket, :state, new_state)}
   end
 
-
   @doc"""
+  MULTI SEND AND CREATE: Функция 'click_submit_message' создает и сохраняет в БД новый чат а так же сообщение
+  """
+  def handle_in("click_submit_message", payload, socket) do
+    current_user = socket.assigns.current_user
+    ai_profile_id = Map.get(payload, "ai_profile_id")
+
+    options = case group_id do
+      "All" -> %{}
+      nil -> %{}
+      id -> %{"group_id" => id}
+    end
+
+    final_prompt =
+      case String.trim(system_prompt) do
+        "" -> "Ты опытный и вежливый персональный помощник, будь краток и говори по делу. Не галлюцинируй."
+        valid_prompt -> valid_prompt
+      end
+
+    # Достаем профиль агента из БД, чтобы узнать имя его модели (gpt-4o, claude и т.д.)
+    case AiProfiles.get_ai_profile(ai_profile_id) do
+      nil ->
+        {:reply, {:error, %{reason: "profile_not_found"}}, socket}
+
+      profile ->
+        generated_title =
+          if String.length(final_prompt) > 35 do
+            String.slice(final_prompt, 0, 35) <> "..."
+          else
+            final_prompt
+          end
+
+        # Передаем в контекст все необходимые поля
+        db_result = Chats.create_chat_with_prompt(
+          current_user.id,
+          profile.id,
+          profile.model,
+          generated_title,
+          group_id,
+          final_prompt
+        )
+
+        case db_result do
+          {:ok, %{chat: new_chat, system_message: system_message}} ->
+            updated_chats = Chats.list_user_chats(current_user.id, options: options)
+            formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
+            has_more = length(formatted_chats) >= 15
+
+            new_state =
+              socket.assigns.state
+
+              |> Map.put("chats_list", formatted_chats)
+              |> Map.put("active_chat", %{
+                "id" => to_string(new_chat.id),
+                "ai_profile_id" => to_string(profile.id),
+              })
+              |> Map.put("has_more_chats", has_more)
+              |> Map.delete("ai_profiles")
+
+            push(socket, "sync", new_state)
+            {:reply, :ok, assign(socket, :state, new_state)}
+
+          {:error, _step, _changeset, _changes} ->
+            {:reply, {:error, %{reason: "database_error"}}, socket}
+        end
+    end
+  end
+
+
+
+
+    @doc"""
   CREATE:             Функция 'click_submit' создает - сохраняет в БД новый чат
   """
   def handle_in("click_submit", payload, socket) do
@@ -144,6 +214,7 @@ defmodule MessengerWeb.Actions.ChatActions do
 
 
     # Перебираем экшены для апдейта
+    # 1) обновить название чата 2) закрепить/открепить 3) удалить чат
     action_result =
       case action do
         "update_title" -> Chats.update_chat(chat_id, current_user.id, %{"title" => title})
@@ -380,7 +451,7 @@ defmodule MessengerWeb.Actions.ChatActions do
 
   @doc"""
   ---------------------ПОДРАЗДЕЛ ОПЕРАЦИЙ С СООБЩЕНИЯМИ ЧАТОВ----------------------------
-  """
+
 
   # SEND MESSAGE
   def handle_in("click_send_message", %{"chat_id" => chat_id, "content" => content}, socket) do
@@ -407,45 +478,5 @@ defmodule MessengerWeb.Actions.ChatActions do
 
 
   end
-
-  # Получение кусочков ответа от ИИ и формирование этого в полный ответ для отдачи в БД
-  defp generate_and_stream_ai_response(socket, chat_id, user_message) do
-    # Собираем контекст (System prompt + Summary + Raw tail)
-    context = Chats.build_llm_context(chat_id)
-
-    # Получаем профиль AI (модель, api key, etc)
-    ai_profile = AiProfiles.get_profile_for_chat(chat_id)
-
-    # Вызываем ReqLLM
-    # max_tokens: 1500 пока такое ограничение
-    stream = ReqLLM.chat(ai_profile, context, stream: true, max_tokens: 1500)
-
-    # Собираем ответ по кусочкам
-    full_response =
-    stream
-    |> Enum.reduce("", fn %{text: text}, acc ->
-      # Пушим каждый кусочек на фронт для стриминга
-      push(socket, "chat:message_chunk", %{chat_id: chat_id, text: text})
-      acc <> text
-    end)
-
-    # Сохраняем полный ответ от ассистента в БД
-    case Chats.create_message(%{ chat_id: chat_id, role: "assistant", content: full_response}) do
-      {:ok, ai_message} ->
-        formatted_message = Enum.map(ai_message, &Serializer.message_serialize/1)
-
-        new_state = socket.assigns.state
-                    |> Map.put("messages", formatted_message )
-        push(socket, "sync", new_state)
-
-        # Сохраняем обновленное состояние в процессе сокета
-        {:reply, :ok, assign(socket, :state, new_state)}
-      {:error, _changeset} ->
-        {:reply, {:error, %{reason: "failed_to_send_message"}}, socket}
-
-        Oban.insert(CheckSummarizationJob.new(%{chat_id: chat_id}))
-        :ok
-    end
-  end
-
+  """
 end
