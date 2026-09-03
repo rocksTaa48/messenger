@@ -6,20 +6,12 @@ defmodule Messenger.AiProfiles do
 
 
 
-  # Подгружаем спсок профилей доступных для пользователя
-  def list_ai_profiles(user_status) do
+  # Подгружаем спсок профилей доступных для пользователя по его "status"
+  def available_user_profiles(user_status) do
     AiProfile
     |> where(is_active: true, is_public: true)
     |> tier_filter(user_status)
     |> Repo.all()
-  end
-
-  def default_ai_profile(user_status) do
-    AiProfile
-    |> where(is_active: true, is_public: true)
-    |> where(tier: ^user_status)
-    |> where(is_default_for_tier: true)
-    |> Repo.one()
   end
 
   defp tier_filter(query, "free") do
@@ -34,8 +26,25 @@ defmodule Messenger.AiProfiles do
     where([], false)
   end
 
+  # Достаем профиль по умолчанию для тарифного плана пользователя по его "status"
+  def get_default_ai_profile(user_status) do
+    AiProfile
+    |> where(is_active: true, is_public: true)
+    |> where(tier: ^user_status)
+    |> where(is_default_for_tier: true)
+    |> Repo.one()
+  end
+
+  # Достаем конкретный профиль по id
   def get_ai_profile(ai_profile_id) do
     Repo.get(AiProfile, ai_profile_id)
+  end
+
+  # Достаем конкретный профиль по ai_profile_id
+  def get_system_prompt(ai_profile_id) do
+    Prompt
+    |> where(ai_profile_id: ^ai_profile_id)
+    Repo.one()
   end
 
 end

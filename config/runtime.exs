@@ -1,7 +1,7 @@
 import Config
 
 if config_env() in [:dev, :prod] do
-  global_openai_key = System.get_env("GLOBAL_OPENAI_API_KEY")
+  openrouter_api_key = System.get_env("OPENROUTER_API_KEY")
   telegram_bot_token  = System.get_env("TELEGRAM_BOT_TOKEN")
   secret_key_base  = System.get_env("SECRET_KEY_BASE")
   secure_api_key = System.get_env("SECURE_USER_API_MASTER_KEY")
@@ -16,7 +16,7 @@ if config_env() in [:dev, :prod] do
 
   # Задаем конфиг для AI-провайдера(ов)
   config :messenger, :ai_providers,
-         openai: [api_key: global_openai_key]
+         openrouter_api_key: openrouter_api_key
 
   # Задаем telegram bot token
   config :messenger, :telegram,

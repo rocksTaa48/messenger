@@ -24,7 +24,7 @@ defmodule MessengerWeb.SessionChannel do
 
     # Базовые данные, нужные всегда, такие как - профиль, группы, список профилей ИИ, может еще чего.
     groups = Chats.list_user_groups(current_user.id)
-    ai_profiles = AiProfiles.list_ai_profiles(current_user.status)
+    ai_profiles = AiProfiles.available_user_profiles(current_user.status)
 
     formatted_groups = Enum.map(groups, &Serializer.group_serialize/1)
     formatted_profiles = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)

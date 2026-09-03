@@ -9,6 +9,7 @@ defmodule Messenger.AiProfiles.Prompt do
     field :version, :integer
     field :is_active, :boolean, default: false
     field :metadata, :map
+    has_many :ai_profiles, Messenger.AiProfiles.AiProfile
 
     timestamps(type: :utc_datetime)
   end
@@ -16,7 +17,7 @@ defmodule Messenger.AiProfiles.Prompt do
   @doc false
   def changeset(prompt, attrs) do
     prompt
-    |> cast(attrs, [:name, :description, :content, :version, :is_active, :metadata])
-    |> validate_required([:name, :description, :content, :version, :is_active])
+    |> cast(attrs, [:name, :description, :content, :is_active, :version, :metadata])
+    |> validate_required([:name, :description, :content, :is_active])
   end
 end

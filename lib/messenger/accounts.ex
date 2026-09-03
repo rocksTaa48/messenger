@@ -50,7 +50,7 @@ defmodule Messenger.Accounts do
 
       nil ->
         # Если пользователя нет. При первой регистрации жестко задаем роль "pending"
-        registration_attrs = Map.put(attrs, :role, "pending")
+        registration_attrs = Map.merge(attrs, %{role: "pending", status: "free"})
 
         case %User{}
 

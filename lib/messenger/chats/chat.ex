@@ -28,8 +28,8 @@ defmodule Messenger.Chats.Chat do
       :summary,
       :summarized_up_to_message_id,
     ])
-    |> validate_required([:title, :model_name, :user_id, :ai_profile_id])
-    |> validate_length(:title, min: 1, max: 100)
+    |> validate_required([:model_name, :user_id, :ai_profile_id])
+    |> validate_length(:title, min: 0, max: 100)
     |> foreign_key_constraint(:user_id)
     |> foreign_key_constraint(:ai_profile_id)
     |> foreign_key_constraint(:group_id)

@@ -9,11 +9,8 @@ defmodule Messenger.Repo.Migrations.CreatePrompts do
       add :version, :integer
       add :is_active, :boolean, default: false, null: false
       add :metadata, :map, default: %{}
-      add :ai_profile_id, references(:ai_profiles, on_delete: :nilify_all )
-
 
       timestamps(type: :utc_datetime)
     end
-    create index(:prompts, [:ai_profile_id])
   end
 end

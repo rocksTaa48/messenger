@@ -39,156 +39,115 @@ defmodule MessengerWeb.Actions.ChatActions do
   """
   def handle_in("click_new", _payload, socket) do
     current_user = socket.assigns.current_user
-    ai_profiles = AiProfiles.list_ai_profiles(current_user.status)
+    ai_profiles = AiProfiles.available_user_profiles(current_user.status)
     formated_profile = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
 
     # Дополняем дерево массивом ai_profiles
     new_state = socket.assigns.state
                 |> Map.put("ai_profiles", formated_profile)
 
-    # Синхронизируем. Шторка на фронтенде тут же увидит $appState.ai_profiles и отрендерит список!
     push(socket, "sync", new_state)
     {:reply, :ok, assign(socket, :state, new_state)}
   end
 
   @doc"""
-  MULTI SEND AND CREATE: Функция 'click_submit_message' создает и сохраняет в БД новый чат а так же сообщение
+  CREATE_CHAT_AND_MESSAGE:    Мультифункция создает чат и сообщение в нем от пользователя
   """
   def handle_in("click_submit_message", payload, socket) do
     current_user = socket.assigns.current_user
+    chat_id = Map.get(payload, "chat_id")
+    content = Map.get(payload, "content")
     ai_profile_id = Map.get(payload, "ai_profile_id")
+    # Проверяем есть ли чат? Тоесть будет выполнено добавление сообщения в текущий чат или создание нового
+    chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
+    # Достаем AI профиль текущего чата, если таковой имеется
+    chat_ai_profile_id = if chat, do: chat.ai_profile_id, else: nil
 
-    options = case group_id do
-      "All" -> %{}
-      nil -> %{}
-      id -> %{"group_id" => id}
-    end
+    available_user_ai_profiles = AiProfiles.available_user_profiles(current_user.status)
+    available_ai_profiles_ids = Enum.map(available_user_ai_profiles, fn profile -> profile.id end)
 
-    final_prompt =
-      case String.trim(system_prompt) do
-        "" -> "Ты опытный и вежливый персональный помощник, будь краток и говори по делу. Не галлюцинируй."
-        valid_prompt -> valid_prompt
+    # Здесь может не красиво, зато наглядно мы ищем AI профиль,
+    # 1) это введенный вручную, 2) закрепленный за чатом, 3) фоллбэк на пользовательский по умолчанию
+    ai_profile =
+      case ai_profile_id do
+        nil -> nil
+        profile_id ->
+          if profile_id in available_ai_profiles_ids, do: AiProfiles.get_ai_profile(profile_id), else: nil
+      end
+      |> case do
+           nil ->
+             if chat_id && chat_ai_profile_id in available_ai_profiles_ids do
+               AiProfiles.get_ai_profile(chat_ai_profile_id)
+             else
+               nil
+             end
+           profile -> profile
+         end
+      |> case do
+           nil -> AiProfiles.get_default_ai_profile(current_user.status)
+           profile -> profile
+         end
+
+    action =
+      case chat do
+        nil ->
+          create_chat_and_first_message(current_user.id, ai_profile, content)
+        existing_chat ->
+          create_message_in_existing_chat(current_user.id, ai_profile, existing_chat, content)
       end
 
-    # Достаем профиль агента из БД, чтобы узнать имя его модели (gpt-4o, claude и т.д.)
-    case AiProfiles.get_ai_profile(ai_profile_id) do
-      nil ->
-        {:reply, {:error, %{reason: "profile_not_found"}}, socket}
-
-      profile ->
-        generated_title =
-          if String.length(final_prompt) > 35 do
-            String.slice(final_prompt, 0, 35) <> "..."
-          else
-            final_prompt
+    case action do
+      {:ok, updated_or_new_chat} ->
+        messages =
+          case Chats.get_chat_messages(updated_or_new_chat.id, current_user.id) do
+            {:error, _} -> []
+            msgs -> Enum.map(msgs, &Serializer.message_serialize/1)
           end
 
-        # Передаем в контекст все необходимые поля
-        db_result = Chats.create_chat_with_prompt(
-          current_user.id,
-          profile.id,
-          profile.model,
-          generated_title,
-          group_id,
-          final_prompt
-        )
+        new_state =
+          socket.assigns.state
+          |> Map.put("active_chat", %{
+            "id" => updated_or_new_chat.id,
+            "group_id" => updated_or_new_chat.group_id,
+            "messages_list" => messages
+          })
 
-        case db_result do
-          {:ok, %{chat: new_chat, system_message: system_message}} ->
-            updated_chats = Chats.list_user_chats(current_user.id, options: options)
-            formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
-            has_more = length(formatted_chats) >= 15
+        {:reply, {:ok, new_state}, assign(socket, :state, new_state)}
 
-            new_state =
-              socket.assigns.state
-
-              |> Map.put("chats_list", formatted_chats)
-              |> Map.put("active_chat", %{
-                "id" => to_string(new_chat.id),
-                "ai_profile_id" => to_string(profile.id),
-              })
-              |> Map.put("has_more_chats", has_more)
-              |> Map.delete("ai_profiles")
-
-            push(socket, "sync", new_state)
-            {:reply, :ok, assign(socket, :state, new_state)}
-
-          {:error, _step, _changeset, _changes} ->
-            {:reply, {:error, %{reason: "database_error"}}, socket}
-        end
+      {:error, _reason} ->
+        {:reply, {:error, %{reason: "failed_to_process_message"}}, socket}
     end
   end
 
+  # Хелпер: создание нового сообщения в новом чате
+  defp create_chat_and_first_message(user_id, ai_profile, content) do
+    prompt = AiProfiles.get_system_prompt(ai_profile.id)
 
-
-
-    @doc"""
-  CREATE:             Функция 'click_submit' создает - сохраняет в БД новый чат
-  """
-  def handle_in("click_submit", payload, socket) do
-    current_user = socket.assigns.current_user
-    group_id = Map.get(payload, "group_id")
-    ai_profile_id = Map.get(payload, "ai_profile_id")
-    system_prompt = Map.get(payload, "system_prompt")
-
-    options = case group_id do
-      "All" -> %{}
-      nil -> %{}
-      id -> %{"group_id" => id}
+    case Chats.first_time_create_chat_and_message(
+           user_id,
+           ai_profile.id,
+           ai_profile.openrouter_model_id,
+           prompt.content,
+           content
+         ) do
+      {:ok, %{chat: chat, content: message}} ->
+        Messenger.Chats.AiStreamer.start_streaming(user_id, ai_profile, chat, message, [])
+        {:ok, chat}
+      {:error, _failed_step, _failed_value, _changesets} ->
+        {:error, "db_insert_failed"}
     end
+  end
 
-    final_prompt =
-      case String.trim(system_prompt) do
-        "" -> "Ты опытный и вежливый персональный помощник, будь краток и говори по делу. Не галлюцинируй."
-        valid_prompt -> valid_prompt
-      end
+  # Хелпер: создание нового сообщения в уже существующем чате
+  defp create_message_in_existing_chat(user_id, ai_profile, chat, content) do
 
-    # Достаем профиль агента из БД, чтобы узнать имя его модели (gpt-4o, claude и т.д.)
-    case AiProfiles.get_ai_profile(ai_profile_id) do
-      nil ->
-        {:reply, {:error, %{reason: "profile_not_found"}}, socket}
-
-      profile ->
-        generated_title =
-          if String.length(final_prompt) > 35 do
-            String.slice(final_prompt, 0, 35) <> "..."
-          else
-            final_prompt
-          end
-
-        # Передаем в контекст все необходимые поля
-        db_result = Chats.create_chat_with_prompt(
-          current_user.id,
-          profile.id,
-          profile.model,
-          generated_title,
-          group_id,
-          final_prompt
-        )
-
-        case db_result do
-          {:ok, %{chat: new_chat, system_message: system_message}} ->
-            updated_chats = Chats.list_user_chats(current_user.id, options: options)
-            formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
-            has_more = length(formatted_chats) >= 15
-
-            new_state =
-              socket.assigns.state
-
-              |> Map.put("chats_list", formatted_chats)
-              |> Map.put("active_chat", %{
-                "id" => to_string(new_chat.id),
-                "ai_profile_id" => to_string(profile.id),
-              })
-              |> Map.put("has_more_chats", has_more)
-              |> Map.delete("ai_profiles")
-
-            push(socket, "sync", new_state)
-            {:reply, :ok, assign(socket, :state, new_state)}
-
-          {:error, _step, _changeset, _changes} ->
-            {:reply, {:error, %{reason: "database_error"}}, socket}
-        end
+    case Chats.create_message(%{chat_id: chat.id, content: content, role: "user"}) do
+      {:ok, message} ->
+        context = Chats.get_ai_context(chat.id)
+        Messenger.Chats.AiStreamer.start_streaming(user_id, ai_profile, chat, message, context)
+        {:ok, chat}
+      {:error, _changeset} ->
+        {:error, "message_insert_failed"}
     end
   end
 
@@ -198,7 +157,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   def handle_in("click_update_chat", payload, socket) do
 
     current_user = socket.assigns.current_user
-    action   = Map.get(payload, "action")
+    action = Map.get(payload, "action")
     group_id_raw = Map.get(payload, "group_id")
     chat_id = Map.get(payload, "chat_id")
     title = Map.get(payload, "title")

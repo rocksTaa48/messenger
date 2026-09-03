@@ -14,6 +14,7 @@ defmodule Messenger.Application do
       # Start a worker by calling: Messenger.Worker.start_link(arg)
       # {Messenger.Worker, arg},
       # Start to serve requests, typically the last entry
+
       MessengerWeb.Endpoint
     ]
 

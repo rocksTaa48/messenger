@@ -188,17 +188,16 @@ defmodule Messenger.Chats do
   @doc"""
   Функция Инициализирующая первое создание чата, запись в БД как Чата так и первое его сообщение с пометкой 'system'
   """
-  def create_chat_with_prompt(user_id, ai_profile_id, model_name, title, group_id, system_prompt) do
+  def first_time_create_chat_and_message(user_id, ai_profile_id, model_name, system_prompt, content) do
     Multi.new()
-    # 1: Создаем чат со всеми обязательными полями
+      # 1: Создаем чат со всеми обязательными полями
     |> Multi.insert(:chat, Chat.changeset(%Chat{}, %{
       "user_id" => user_id,
-      "group_id" => group_id,
       "ai_profile_id" => String.to_integer(to_string(ai_profile_id)),
-      "title" => title,
       "model_name" => model_name
     }))
-      # 2: Создаем системное сообщение
+
+      # 2: Создаем сервисное сообщение (промпт) для модели
     |> Multi.insert(:system_message, fn %{chat: chat} ->
       Message.changeset(%Message{}, %{
         "chat_id" => chat.id,
@@ -206,6 +205,16 @@ defmodule Messenger.Chats do
         "role" => "system"
       })
     end)
+
+     # 3: Собственно сообщение от пользователя
+    |> Multi.insert(:content, fn %{chat: chat} ->
+      Message.changeset(%Message{}, %{
+        "chat_id" => chat.id,
+        "content" => content,
+        "role" => "user"
+      })
+    end)
+
     |> Repo.transaction()
   end
 
@@ -314,18 +323,24 @@ defmodule Messenger.Chats do
   @doc"""
   ----------------------------------------Это участок работы с сообщениями (messages)-------------------------------
   """
-  def create_message(attrs) do
-    %Message{}
-
-    |> Message.changeset(attrs)
+  def create_message(chat_id, content, role) do
+    Message.changeset(%Message{}, %{
+      "chat_id" => String.to_integer(to_string(chat_id)),
+      "content" => content,
+      "role" => role
+    })
     |> Repo.insert()
   end
 
-  def create_assistant_message(attrs) do
-    %Message{}
-
-    |> Message.changeset(attrs)
+  def create_assistant_message(chat_id, content, role, prompt_tokens, completion_tokens, total_tokens) do
+    Message.changeset(%Message{}, %{
+      "chat_id" => String.to_integer(to_string(chat_id)),
+      "content" => content,
+      "role" => role,
+      "tokens_prompt" => prompt_tokens,
+      "tokens_completion" => completion_tokens,
+      "tokens_total" => total_tokens
+    })
     |> Repo.insert()
   end
-
 end

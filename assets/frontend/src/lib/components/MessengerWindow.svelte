@@ -57,7 +57,7 @@
         if (!text || !activeChat) return;
 
         // Отправляем ивент в Phoenix Channel
-        appState.send("chat:send_message", {
+        appState.send("chat:click_submit_message", {
             chat_id: activeChat.id,
             text: text
         });

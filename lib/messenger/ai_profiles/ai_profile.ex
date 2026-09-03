@@ -27,6 +27,7 @@ defmodule Messenger.AiProfiles.AiProfile do
     field :metadata, :map, default: %{}
 
     has_many :chats, Messenger.Chats.Chat
+    belongs_to :prompt, Messenger.AiProfiles.Prompt
 
     timestamps(type: :utc_datetime)
   end
@@ -56,6 +57,7 @@ defmodule Messenger.AiProfiles.AiProfile do
         :cost_per_1m_output,
         :cost_currency,
         :cost_updated_at,
+        :prompt_id,
         :metadata
       ])
 
