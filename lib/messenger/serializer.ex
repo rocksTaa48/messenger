@@ -4,8 +4,8 @@ defmodule Messenger.Serializer do
   def message_serialize(message) do
     %{
       "id" => to_string(message.id),
-      "text" => message.content,
-      "role" => if(message.role == "user", do: "me", else: "other"),
+      "content" => message.content,
+      "role" => message.role,
       "created_at" => DateTime.to_iso8601(message.inserted_at)
     }
   end

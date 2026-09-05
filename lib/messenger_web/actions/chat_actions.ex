@@ -23,8 +23,11 @@ defmodule MessengerWeb.Actions.ChatActions do
                 |> Map.put("active_chat", %{
       "id" => chat_id,
       "group_id" => chat.group_id,
-      "messages_list" => serialized_messages
+      "messages" => serialized_messages
     })
+
+    IO.inspect(serialized_messages, label: "SERIALIZED MESSAGES")
+
 
     # Шлем обновленный монолит-стейт во фронтенд
     push(socket, "sync", new_state)

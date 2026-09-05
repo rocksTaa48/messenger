@@ -38,7 +38,7 @@ export interface AppState {
         display_description: string;
     }>;
     groups: Array<{ id: string; title: string }>;
-    active_chat: { id: string; messages: Array<{ id: number; content: string; group_id: number; sender: string }> } | null;
+    active_chat: { id: string; messages: Array<{ id: number; content: string; role: string, created_at: string;}> } | null;
     has_more_chats: boolean;
     settings: { theme: string; lang: string };
 }

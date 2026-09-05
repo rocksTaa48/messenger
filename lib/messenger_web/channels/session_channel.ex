@@ -129,8 +129,9 @@ defmodule MessengerWeb.SessionChannel do
 
   # 1. Пушим событие на фронтенд.
   @impl true
-  def handle_info({:ai_stream_done, %{chat_id: chat_id} = payload}, socket) do
-    push(socket, "ai:stream_done", payload)
+  def handle_info({:ai_token, %{chat_id: chat_id, token: token} = payload}, socket) do
+    # Отправляем токен на фронтенд
+    push(socket, "ai:token", payload)
     {:noreply, socket}
   end
 

@@ -92,65 +92,131 @@ defmodule Messenger.Chats.ChatsAgent do
     end
   end
 
-  # --- Твоя проверенная логика работы с Req (4 аргумента) ---
-
   defp process_stream(user_id, chat_id, ai_profile, context) do
     url = "https://openrouter.ai/api/v1/chat/completions"
     api_key = Application.get_env(:messenger, :ai_providers)[:openrouter_api_key]
 
     body = %{
              model: ai_profile.openrouter_model_id,
-             # Весь контекст истории вместе с новым сообщением уже внутри context
              messages: context,
              temperature: ai_profile.temperature,
              top_p: ai_profile.top_p,
              frequency_penalty: ai_profile.frequency_penalty,
              presence_penalty: ai_profile.presence_penalty,
              max_tokens: ai_profile.max_completion_tokens,
+             stream: true,
+             stream_options: %{include_usage: true}
            }
            |> Enum.filter(fn {_k, v} -> not is_nil(v) end)
            |> Enum.into(%{})
 
-    case Req.post(url,
-           json: body,
-           auth: {:bearer, api_key},
-           finch: [name: Messenger.OpenRouterFinch],
-           receive_timeout: 30_000,
-           headers: [
-             {"HTTP-Referer", "https://your-monorepo-app.com"},
-             {"X-Title", "Phoenix Svelte Chat"}
-           ]
-         ) do
-      {:ok, %Req.Response{status: 200, body: %{"choices" => [%{"message" => %{"content" => content}} | _], "usage" => usage}}} ->
-        cost_details = usage["cost_details"] || %{}
-        {:ok, _} = Chats.create_assistant_message(%{
-          chat_id: chat_id,
-          content: content,
-          role: "assistant",
-          # Токены
-          tokens_prompt: usage["prompt_tokens"],
-          tokens_completion: usage["completion_tokens"],
-          tokens_total: usage["total_tokens"],
+    Process.put(:sse_buffer, "")
+    Process.put(:full_content, "")
+    Process.put(:final_usage, nil)
 
-          # Стоимость USD
-          cost_prompt: cost_details["upstream_inference_prompt_cost"],
-          cost_completion: cost_details["upstream_inference_completions_cost"],
-          cost_total: usage["cost"]
-        })
-        IO.inspect(usage, label: "USAGE")
-        Phoenix.PubSub.broadcast(
-          Messenger.PubSub,
-          "user:#{user_id}:lobby",
-          {:ai_stream_done, %{chat_id: chat_id}}
-        )
+    try do
+      Req.post!(url,
+        json: body,
+        auth: {:bearer, api_key},
+        finch: [name: Messenger.OpenRouterFinch],
+        receive_timeout: 30_000,
+        headers: [
+          {"HTTP-Referer", "https://your-monorepo-app.com"},
+          {"X-Title", "Phoenix Svelte Chat"}
+        ],
+        into: fn
+          {:data, data}, {req, resp} ->
+            buffer = Process.get(:sse_buffer) <> data
+            parts = String.split(buffer, "\n\n")
+            {events, rest} = Enum.split(parts, -1)
+            Process.put(:sse_buffer, List.first(rest) || "")
 
-      {:ok, %Req.Response{status: status, body: error_body}} ->
-        IO.inspect({status, error_body}, label: "OpenRouter HTTP Error")
-        send_error_to_lobby(user_id, chat_id, "API ошибка: #{status}")
+            Enum.each(events, &process_sse_event(&1, user_id, chat_id))
+            {:cont, {req, resp}}
+          _, {req, resp} ->
+            {:cont, {req, resp}}
+        end
+      )
 
-      {:error, error} ->
-        IO.inspect(error, error_handler_label: "OpenRouter Network Error")
-        send_error_to_lobby(user_id, chat_id, "Сетевая ошибка")
+      full_content = Process.get(:full_content)
+      usage = Process.get(:final_usage) || %{prompt_tokens: 0, completion_tokens: 0, total_tokens: 0}
+
+      cost_details = usage[:cost_details] || %{}
+      {:ok, _} = Chats.create_assistant_message(%{
+        chat_id: chat_id,
+        content: full_content,
+        role: "assistant",
+        tokens_prompt: usage[:prompt_tokens],
+        tokens_completion: usage[:completion_tokens],
+        tokens_total: usage[:total_tokens],
+        cost_prompt: cost_details["upstream_inference_prompt_cost"],
+        cost_completion: cost_details["upstream_inference_completions_cost"],
+        cost_total: usage["cost"]
+      })
+
+      Phoenix.PubSub.broadcast(
+        Messenger.PubSub,
+        "user:#{user_id}:lobby",
+        {:ai_stream_done, %{chat_id: chat_id}}
+      )
+
+    rescue
+      e ->
+        IO.inspect(e, label: "OpenRouter streaming error")
+        send_error_to_lobby(user_id, chat_id, "Ошибка получения ответа")
+    after
+      Process.delete(:sse_buffer)
+      Process.delete(:full_content)
+      Process.delete(:final_usage)
+    end
+  end
+
+  defp process_sse_event(event, user_id, chat_id) do
+    event = String.trim(event)
+
+    cond do
+      String.starts_with?(event, "data: ") ->
+        data = String.replace_prefix(event, "data: ", "")
+
+        case Jason.decode(data) do
+          {:ok, json} ->
+            # Обработка usage (обычно в последнем чанке)
+            if usage = json["usage"] do
+              Process.put(:final_usage, %{
+                prompt_tokens: usage["prompt_tokens"],
+                completion_tokens: usage["completion_tokens"],
+                total_tokens: usage["total_tokens"],
+                cost_details: usage["cost_details"],
+                cost: usage["cost"]
+              })
+            end
+
+            # Извлечение токена
+            choices = json["choices"] || []
+            case choices do
+              [%{"delta" => %{"content" => content}} | _] when is_binary(content) ->
+                current = Process.get(:full_content) || ""
+                new_content = current <> content
+                Process.put(:full_content, new_content)
+
+                # Трансляция токена в канал
+                Phoenix.PubSub.broadcast(
+                  Messenger.PubSub,
+                  "user:#{user_id}:lobby",
+                  {:ai_token, %{chat_id: chat_id, token: content}}
+                )
+              _ ->
+                :ok
+            end
+
+          {:error, _} -> :ok
+        end
+
+      event == "data: [DONE]" ->
+        :ok
+
+      true ->
+        :ok
     end
   end
 
