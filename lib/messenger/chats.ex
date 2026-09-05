@@ -323,23 +323,38 @@ defmodule Messenger.Chats do
   @doc"""
   ----------------------------------------Это участок работы с сообщениями (messages)-------------------------------
   """
-  def create_message(chat_id, content, role) do
+  def create_message(chat_id, content) do
     Message.changeset(%Message{}, %{
       "chat_id" => String.to_integer(to_string(chat_id)),
       "content" => content,
-      "role" => role
+      "role" => "user"
     })
     |> Repo.insert()
   end
 
-  def create_assistant_message(chat_id, content, role, prompt_tokens, completion_tokens, total_tokens) do
+  def create_assistant_message(%{
+    chat_id: chat_id,
+    content: content,
+    role: role,
+    tokens_prompt: tokens_prompt,
+    tokens_completion: tokens_completion,
+    tokens_total: tokens_total,
+    cost_prompt: cost_prompt,
+    cost_completion: cost_completion,
+    cost_total: cost_total
+  }) do
+
     Message.changeset(%Message{}, %{
       "chat_id" => String.to_integer(to_string(chat_id)),
-      "content" => content,
+      "content" => content || "",
       "role" => role,
-      "tokens_prompt" => prompt_tokens,
-      "tokens_completion" => completion_tokens,
-      "tokens_total" => total_tokens
+      "tokens_prompt" => tokens_prompt || 0,
+      "tokens_completion" => tokens_completion || 0,
+      "tokens_total" => tokens_total || 0,
+      "cost_prompt" => cost_prompt,
+      "cost_completion" => cost_completion,
+      "cost_total" => cost_total
+
     })
     |> Repo.insert()
   end

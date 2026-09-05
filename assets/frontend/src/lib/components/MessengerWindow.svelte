@@ -54,11 +54,11 @@
     // Единственный метод отправки сообщения на бэкенд Phoenix
     function handleSend() {
         const text = newMessageText.trim();
-        if (!text || !activeChat) return;
+        if (!text) return;
 
         // Отправляем ивент в Phoenix Channel
         appState.send("chat:click_submit_message", {
-            chat_id: activeChat.id,
+            chat_id: activeChat?.id || null,
             text: text
         });
 

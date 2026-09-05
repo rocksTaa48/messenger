@@ -56,7 +56,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   def handle_in("click_submit_message", payload, socket) do
     current_user = socket.assigns.current_user
     chat_id = Map.get(payload, "chat_id")
-    content = Map.get(payload, "content")
+    content = Map.get(payload, "text")
     ai_profile_id = Map.get(payload, "ai_profile_id")
     # Проверяем есть ли чат? Тоесть будет выполнено добавление сообщения в текущий чат или создание нового
     chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
@@ -121,7 +121,7 @@ defmodule MessengerWeb.Actions.ChatActions do
 
   # Хелпер: создание нового сообщения в новом чате
   defp create_chat_and_first_message(user_id, ai_profile, content) do
-    prompt = AiProfiles.get_system_prompt(ai_profile.id)
+    prompt = AiProfiles.get_system_prompt(ai_profile.prompt_id)
 
     case Chats.first_time_create_chat_and_message(
            user_id,
@@ -131,7 +131,9 @@ defmodule MessengerWeb.Actions.ChatActions do
            content
          ) do
       {:ok, %{chat: chat, content: message}} ->
-        Messenger.Chats.AiStreamer.start_streaming(user_id, ai_profile, chat, message, [])
+        IO.inspect("✅ Чат создан, ID: #{chat.id}. Сейчас вызовем ChatAgent...", label: "DEBUG")
+        context = Chats.get_ai_context(chat.id)
+        Messenger.Chats.ChatsAgent.start_and_process(user_id, chat.id, ai_profile, context)
         {:ok, chat}
       {:error, _failed_step, _failed_value, _changesets} ->
         {:error, "db_insert_failed"}
@@ -141,10 +143,10 @@ defmodule MessengerWeb.Actions.ChatActions do
   # Хелпер: создание нового сообщения в уже существующем чате
   defp create_message_in_existing_chat(user_id, ai_profile, chat, content) do
 
-    case Chats.create_message(%{chat_id: chat.id, content: content, role: "user"}) do
+    case Chats.create_message(chat.id, content) do
       {:ok, message} ->
         context = Chats.get_ai_context(chat.id)
-        Messenger.Chats.AiStreamer.start_streaming(user_id, ai_profile, chat, message, context)
+        Messenger.Chats.ChatsAgent.start_and_process(user_id, chat.id, ai_profile, context)
         {:ok, chat}
       {:error, _changeset} ->
         {:error, "message_insert_failed"}

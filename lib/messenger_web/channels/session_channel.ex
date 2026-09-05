@@ -127,4 +127,27 @@ defmodule MessengerWeb.SessionChannel do
   end
 
 
+  # 1. Пушим событие на фронтенд.
+  @impl true
+  def handle_info({:ai_stream_done, %{chat_id: chat_id} = payload}, socket) do
+    push(socket, "ai:stream_done", payload)
+    {:noreply, socket}
+  end
+
+  # 2. Ошибка при генерации AI
+  @impl true
+  def handle_info({:ai_stream_error, %{chat_id: chat_id, reason: reason} = payload}, socket) do
+    push(socket, "ai:stream_error", payload)
+    {:noreply, socket}
+  end
+
+  # 3. фолбэк от неожиданного сообщения
+  @impl true
+  def handle_info(msg, socket) do
+    # Можно оставить просто IO.inspect для отладки, или вообще убрать, если не нужно.
+    IO.inspect(msg, label: "⚠️ Неожиданное сообщение в SessionChannel (PubSub)")
+    {:noreply, socket}
+  end
+
+
 end

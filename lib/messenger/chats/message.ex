@@ -23,7 +23,17 @@ defmodule Messenger.Chats.Message do
   @doc false
   def changeset(message, attrs) do
     message
-    |> cast(attrs, [:role, :content, :chat_id])
+    |> cast(attrs, [
+      :role,
+      :content,
+      :chat_id,
+      :tokens_prompt,
+      :tokens_completion,
+      :tokens_total,
+      :cost_prompt,
+      :cost_completion,
+      :cost_total,
+      :metadata])
     |> validate_required([:role, :content, :chat_id])
     |> validate_inclusion(:role, ["system", "user", "assistant"])
     |> validate_inclusion(:status, ["pending", "send", "error"])

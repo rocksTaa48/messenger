@@ -41,10 +41,8 @@ defmodule Messenger.AiProfiles do
   end
 
   # Достаем конкретный профиль по ai_profile_id
-  def get_system_prompt(ai_profile_id) do
-    Prompt
-    |> where(ai_profile_id: ^ai_profile_id)
-    Repo.one()
+  def get_system_prompt(id) do
+    Repo.get(Prompt, id)
   end
 
 end
