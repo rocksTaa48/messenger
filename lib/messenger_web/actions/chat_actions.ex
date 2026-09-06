@@ -100,22 +100,9 @@ defmodule MessengerWeb.Actions.ChatActions do
       end
 
     case action do
-      {:ok, updated_or_new_chat} ->
-        messages =
-          case Chats.get_chat_messages(updated_or_new_chat.id, current_user.id) do
-            {:error, _} -> []
-            msgs -> Enum.map(msgs, &Serializer.message_serialize/1)
-          end
+      {:ok, chat, message} ->
 
-        new_state =
-          socket.assigns.state
-          |> Map.put("active_chat", %{
-            "id" => updated_or_new_chat.id,
-            "group_id" => updated_or_new_chat.group_id,
-            "messages" => messages
-          })
-
-        {:reply, {:ok, new_state}, assign(socket, :state, new_state)}
+        {:reply, {:ok, %{"group_id" => chat.group_id, "chat_id" => chat.id, "message_id" => message.id}}, socket}
 
       {:error, _reason} ->
         {:reply, {:error, %{reason: "failed_to_process_message"}}, socket}
@@ -150,7 +137,7 @@ defmodule MessengerWeb.Actions.ChatActions do
       {:ok, message} ->
         context = Chats.get_ai_context(chat.id)
         Messenger.Chats.ChatsAgent.start_and_process(user_id, chat.id, ai_profile, context)
-        {:ok, chat}
+        {:ok, chat, message}
       {:error, _changeset} ->
         {:error, "message_insert_failed"}
     end

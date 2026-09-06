@@ -7,6 +7,8 @@
     // Вся информация реактивно извлекается из appState
     $: activeChat = $appState.active_chat;
     $: messages = activeChat?.messages || [];
+    $: isGenerating = messages.some(msg => msg.is_streaming === true);
+
 
     // Автоматически находим имя текущего чата в общем списке
     $: currentChatInfo = $appState.chats_list.find(c => c.id === activeChat?.id);
@@ -56,11 +58,9 @@
         const text = newMessageText.trim();
         if (!text) return;
 
-        // Отправляем ивент в Phoenix Channel
-        appState.send("chat:click_submit_message", {
-            chat_id: activeChat?.id || null,
-            text: text
-        });
+        // Отправляем ивент уже не в Phoenix Channel а в стор для мгновенного отображения
+        appState.sendMessage(text);
+
 
         newMessageText = "";
 

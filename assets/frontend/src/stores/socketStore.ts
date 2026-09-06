@@ -128,7 +128,7 @@ export const appState = {
                 update(state => ({ ...state, status: 'error' }));
             });
 
-        // Обработка потока токенов в чат (генерация ответа от ИИ) --------------------->
+        // УЧАСТОК: Обработка потока токенов в чат  ------------------------------> (генерация ответа от ИИ)
         channel.on('ai:token', (payload: { chat_id: string; token: string }) => {
             update(state => {
                 // Игнорируем, если токен не для активного чата
@@ -198,6 +198,86 @@ export const appState = {
             // Просто логируем или можно показать уведомление
             console.error('AI stream error:', payload);
             // При желании можно добавить сообщение об ошибке в чат
+        });
+    },
+
+    // УЧАСТОК: Добавление сообщения в чат ------------------------------------> Оптимистичная отправка сообщения
+    sendMessage(text: string) {
+        if (!text.trim()) return;
+
+        const tempId = `temp-${Date.now()}`;
+        let currentChatId: string | null = null;
+
+        // 1. Оптимистично добавляем на фронт и ЗАПОМИНАЕМ chat_id из стейта
+        update(state => {
+            currentChatId = state.active_chat?.id || null; // <-- ИСПРАВЛЕНО: берем из стейта, а не через $appState
+
+            const activeChat = state.active_chat || {
+                id: '',
+                messages: [],
+                group_id: state.nav_context.params?.group_id
+            };
+
+            const newMessage = {
+                id: tempId,
+                role: 'user',
+                content: text,
+                created_at: new Date().toISOString(),
+                is_pending: true
+            };
+
+            return {
+                ...state,
+                active_chat: {
+                    ...activeChat,
+                    messages: [...activeChat.messages, newMessage]
+                }
+            };
+        });
+
+        // 2. Шлем на бэк и ЛОВИМ результат в переменную pushRequest
+        const pushRequest = this.send("chat:click_submit_message", {
+            chat_id: currentChatId,
+            text: text,
+            temp_id: tempId
+        });
+
+        if (!pushRequest) return; // Защита, если канал умер
+
+        // 3. Получаем ответ и подменяем временный ID на реальный
+        pushRequest.receive('ok', (payload: { chat_id: string; message_id: number }) => {
+            update(state => {
+                if (!state.active_chat) return state;
+
+                const messages = state.active_chat.messages.map(msg =>
+                    // ИСПРАВЛЕНО: tempMsgId -> tempId
+                    msg.id === tempId ? { ...msg, id: payload.message_id, is_pending: false } : msg
+                );
+
+                return {
+                    ...state,
+                    active_chat: {
+                        ...state.active_chat,
+                        id: payload.chat_id,
+                        messages
+                    }
+                };
+            });
+        });
+
+        // 4. На случай ошибки удаляем временное сообщение
+        pushRequest.receive('error', () => {
+            update(state => {
+                if (!state.active_chat) return state;
+                return {
+                    ...state,
+                    active_chat: {
+                        ...state.active_chat,
+                        // ИСПРАВЛЕНО: tempMsgId -> tempId
+                        messages: state.active_chat.messages.filter(m => m.id !== tempId)
+                    }
+                };
+            });
         });
     },
 
