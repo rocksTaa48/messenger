@@ -184,17 +184,27 @@ defmodule Messenger.Chats do
     end
   end
 
+  def get_last_message(chat_id) do
+    Message
+      |> where(chat_id: ^chat_id)
+      |> order_by(desc: :inserted_at)
+      |> limit(1)
+      |> Repo.one()
+  end
+
 
   @doc"""
   Функция Инициализирующая первое создание чата, запись в БД как Чата так и первое его сообщение с пометкой 'system'
   """
   def first_time_create_chat_and_message(user_id, ai_profile_id, model_name, system_prompt, content) do
+    last_message = content |> String.slice(0, 100)
     Multi.new()
       # 1: Создаем чат со всеми обязательными полями
     |> Multi.insert(:chat, Chat.changeset(%Chat{}, %{
       "user_id" => user_id,
       "ai_profile_id" => String.to_integer(to_string(ai_profile_id)),
-      "model_name" => model_name
+      "model_name" => model_name,
+      "last_message" => last_message
     }))
 
       # 2: Создаем сервисное сообщение (промпт) для модели
@@ -343,8 +353,9 @@ defmodule Messenger.Chats do
     cost_completion: cost_completion,
     cost_total: cost_total
   }) do
-
-    Message.changeset(%Message{}, %{
+    last_message = content |> String.slice(0, 100)
+    Multi.new()
+    |> Multi.insert(:message, Message.changeset(%Message{}, %{
       "chat_id" => String.to_integer(to_string(chat_id)),
       "content" => content || "",
       "role" => role,
@@ -355,7 +366,12 @@ defmodule Messenger.Chats do
       "cost_completion" => cost_completion,
       "cost_total" => cost_total
 
-    })
-    |> Repo.insert()
+    }))
+
+    |> Multi.update(:chat, Chat.changeset_for_update_last_message(%Chat{id: chat_id}, %{
+      "last_message" => last_message
+    }))
+
+    |> Repo.transaction()
   end
 end

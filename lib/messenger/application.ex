@@ -25,6 +25,7 @@ defmodule Messenger.Application do
           ]
         }},
       {Registry, keys: :unique, name: Messenger.AgentRegistry}, # Для поиска по chat_id
+      {Task.Supervisor, name: Messenger.TaskSupervisor},
       MessengerWeb.Endpoint
     ]
 

@@ -159,16 +159,16 @@ defmodule Messenger.Chats.ChatsAgent do
         cost_completion: cost_details["upstream_inference_completions_cost"],
         cost_total: usage["cost"]
       }) do
-        {:ok, inserted_message} ->
-          Phoenix.PubSub.broadcast(
-            Messenger.PubSub,
-            "user:#{user_id}:lobby",
-            {:ai_stream_done, %{
-              chat_id: chat_id,
-              message_id: inserted_message.id,
-              content: full_content
-            }}
-          )
+          {:ok, %{message: inserted_message, chat: chat}} ->
+            Phoenix.PubSub.broadcast(
+              Messenger.PubSub,
+              "user:#{user_id}:lobby",
+              {:ai_stream_done, %{
+                chat_id: chat_id,
+                message_id: inserted_message.id,
+                content: full_content
+              }}
+            )
 
         {:error, reason} ->
           IO.inspect(reason, label: "DB Save Error")

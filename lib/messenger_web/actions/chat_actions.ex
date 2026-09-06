@@ -11,7 +11,9 @@ defmodule MessengerWeb.Actions.ChatActions do
   def handle_in("click_open", %{"chat_id" => chat_id}, socket) do
     current_user = socket.assigns.current_user
     chat = Chats.get_chat(current_user.id, chat_id)
+
     messages = Chats.get_chat_messages(chat_id, current_user.id)
+
     serialized_messages =
       case messages do
         {:error, _} -> []
@@ -101,8 +103,12 @@ defmodule MessengerWeb.Actions.ChatActions do
 
     case action do
       {:ok, chat, message} ->
-
-        {:reply, {:ok, %{"group_id" => chat.group_id, "chat_id" => chat.id, "message_id" => message.id}}, socket}
+        # Стейт не обновляем а только отдаем необходимое!
+        {:reply, {:ok, %{
+          "group_id" => chat.group_id, # Что бы при выходе < назад не падать в ебеня
+          "chat_id" => chat.id, # Что бы знать что за чат вообще
+          "message_id" => message.id}}, # Отдать реальный айдишник сообщения
+          socket}
 
       {:error, _reason} ->
         {:reply, {:error, %{reason: "failed_to_process_message"}}, socket}
@@ -123,8 +129,9 @@ defmodule MessengerWeb.Actions.ChatActions do
       {:ok, %{chat: chat, content: message}} ->
         IO.inspect("✅ Чат создан, ID: #{chat.id}. Сейчас вызовем ChatAgent...", label: "DEBUG")
         context = Chats.get_ai_context(chat.id)
-        Messenger.Chats.ChatsAgent.start_and_process(user_id, chat.id, ai_profile, context)
-        {:ok, chat}
+        Chats.ChatsAgent.start_and_process(user_id, chat.id, ai_profile, context)
+        Chats.ChatNameCreator.start_generation(user_id, chat.id, ai_profile, content)
+        {:ok, chat, message}
       {:error, _failed_step, _failed_value, _changesets} ->
         {:error, "db_insert_failed"}
     end
@@ -136,7 +143,10 @@ defmodule MessengerWeb.Actions.ChatActions do
     case Chats.create_message(chat.id, content) do
       {:ok, message} ->
         context = Chats.get_ai_context(chat.id)
-        Messenger.Chats.ChatsAgent.start_and_process(user_id, chat.id, ai_profile, context)
+        Chats.ChatsAgent.start_and_process(user_id, chat.id, ai_profile, context)
+
+        IO.inspect(context, label: "CONTEXT MESSAGES")
+
         {:ok, chat, message}
       {:error, _changeset} ->
         {:error, "message_insert_failed"}

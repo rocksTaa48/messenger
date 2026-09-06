@@ -9,6 +9,18 @@
     $: messages = activeChat?.messages || [];
     $: isGenerating = messages.some(msg => msg.is_streaming === true);
 
+    // 🛡️ Ищем в списке только если есть оба ID (защита от undefined)
+    $: currentChatInfo = $appState.chats_list.find(c =>
+        c.id && activeChat?.id && String(c.id) === String(activeChat.id)
+    );
+
+    $: isThinking = messages.length > 0 && !activeChat?.title && !currentChatInfo?.title;
+
+    // 🚀 ЛОГИКА НАЗВАНИЯ (Ровно то, что ты хотел, но с защитой от пустых строк):
+    $: chatName =
+        activeChat?.title ||
+        currentChatInfo?.title ||
+        (isThinking ? "Придумываю название" : (activeChat ? "Новый чат" : "Ассистент"));
 
     // Автоматически находим имя текущего чата в общем списке
     $: currentChatInfo = $appState.chats_list.find(c => c.id === activeChat?.id);
@@ -101,10 +113,17 @@
         </button>
 
         <div class="flex flex-col items-center flex-1 pr-6">
-            <span class="text-sm font-bold tracking-tight">{chatName}</span>
+            <!-- Если isThinking, текст становится синим и пульсирует -->
+            <span class="text-sm font-bold tracking-tight transition-all duration-300 {isThinking ? 'text-[#2481cc]/80 animate-pulse' : 'text-white'}">
+                {chatName}
+                <!-- Если isThinking, добавляем пульсирующее многоточие -->
+                {#if isThinking}
+                    <span class="inline-block animate-pulse">...</span>
+                {/if}
+            </span>
             <span class="text-[10px] font-medium text-[#2481cc]">
-            online
-        </span>
+                online
+            </span>
         </div>
 
         <div class="p-2 bg-white/5 rounded-xl text-gray-400 hover:text-white transition-colors flex items-center justify-center flex-shrink-0">

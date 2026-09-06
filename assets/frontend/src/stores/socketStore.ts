@@ -27,6 +27,7 @@ export interface AppState {
         unread: number;
         ai_profile_id: string;
         is_pinned: boolean;
+        last_message: string;
     }>;
     ai_profiles: Array<{
         id: string;
@@ -38,7 +39,7 @@ export interface AppState {
         display_description: string;
     }>;
     groups: Array<{ id: string; title: string }>;
-    active_chat: { id: string; messages: Array<{
+    active_chat: { id: string; title: string; messages: Array<{
         id: number;
         content: string;
         role: string;
@@ -128,11 +129,15 @@ export const appState = {
                 update(state => ({ ...state, status: 'error' }));
             });
 
-        // УЧАСТОК: Обработка потока токенов в чат  ------------------------------> (генерация ответа от ИИ)
+        // УЧАСТОК: Обработка потока токенов в чат ------------------------------>
         channel.on('ai:token', (payload: { chat_id: string; token: string }) => {
             update(state => {
-                // Игнорируем, если токен не для активного чата
-                if (!state.active_chat || state.active_chat.id !== payload.chat_id) {
+                if (!state.active_chat) return state;
+
+                const currentId = state.active_chat.id;
+
+                // 🛡️ БЕЗОПАСНАЯ ПРОВЕРКА: Игнорируем, только если ID есть и он НЕ совпадает.
+                if (currentId && currentId !== payload.chat_id) {
                     return state;
                 }
 
@@ -140,12 +145,10 @@ export const appState = {
                 const lastMsg = messages[messages.length - 1];
 
                 if (lastMsg && lastMsg.role === 'assistant' && lastMsg.is_streaming) {
-                    // Дописываем к существующему потоковому сообщению
                     lastMsg.content += payload.token;
                 } else {
-                    // Создаём новое потоковое сообщение
                     messages.push({
-                        id: -Date.now(), // временный отрицательный ID
+                        id: -Date.now(),
                         role: 'assistant',
                         content: payload.token,
                         created_at: new Date().toISOString(),
@@ -157,21 +160,26 @@ export const appState = {
                     ...state,
                     active_chat: {
                         ...state.active_chat,
+                        id: payload.chat_id, // 🎯 Усыновляем ID (или перезаписываем тем же самым)
                         messages
                     }
                 };
             });
         });
 
-        // Завершение генерации
+        // Завершение генерации текста от модели на запрос пользователя
         channel.on('ai:stream_done', (payload: { chat_id: string; message_id?: number; content?: string }) => {
             update(state => {
-                if (!state.active_chat || state.active_chat.id !== payload.chat_id) {
+                if (!state.active_chat) return state;
+
+                const currentId = state.active_chat.id;
+
+                // 🛡️ БЕЗОПАСНАЯ ПРОВЕРКА
+                if (currentId && currentId !== payload.chat_id) {
                     return state;
                 }
 
                 const messages = state.active_chat.messages.map(msg => {
-                    // Находим последнее потоковое сообщение ассистента и завершаем его
                     if (msg.role === 'assistant' && msg.is_streaming) {
                         return {
                             ...msg,
@@ -187,17 +195,57 @@ export const appState = {
                     ...state,
                     active_chat: {
                         ...state.active_chat,
+                        id: payload.chat_id, // 🎯 Усыновляем ID
                         messages
                     }
                 };
             });
         });
 
-        // Ошибка генерации
+        // Ошибка генерации от модели на запрос пользователя
         channel.on('ai:stream_error', (payload: { chat_id: string; reason: string }) => {
             // Просто логируем или можно показать уведомление
             console.error('AI stream error:', payload);
             // При желании можно добавить сообщение об ошибке в чат
+        });
+
+        // Обработка успешного обновления названия чата от модели (она генерит название)
+        channel.on('chat_title_update', (payload: { chat_id: string; title: string }) => {
+            update(state => {
+                const targetId = String(payload.chat_id);
+
+                // 1. Обновляем в общем списке (с защитой от undefined/null)
+                const updatedChatsList = state.chats_list.map(chat =>
+                    (chat.id && String(chat.id) === targetId)
+                        ? { ...chat, title: payload.title }
+                        : chat
+                );
+
+                // 2. 🚀 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Обновляем и active_chat, если это он!
+                let updatedActiveChat = state.active_chat;
+                if (state.active_chat && String(state.active_chat.id) === targetId) {
+                    updatedActiveChat = {
+                        ...state.active_chat,
+                        title: payload.title // Сохраняем название прямо в активный чат
+                    };
+                }
+
+                return {
+                    ...state,
+                    chats_list: updatedChatsList,
+                    active_chat: updatedActiveChat
+                };
+            });
+        });
+
+        // Обработка ошибки обновления названия чата
+        channel.on('chat_title_error', (payload: { chat_id: string; reason: string }) => {
+            // Просто логируем в консоль, чтобы не ломать стейт и не спамить юзера,
+            // так как чат продолжит работать со старым/дефолтным названием
+            console.warn(`[ChatNameCreator] Ошибка генерации названия для чата ${payload.chat_id}: ${payload.reason}`);
+
+            // Возвращаем стейт без изменений
+            return state;
         });
     },
 
@@ -293,45 +341,6 @@ export const appState = {
      * Переход на новый экран (Движение ВПЕРЕД).
      * Вызываем: appState.goTo({ screen: 'inside_chat', params: { chat_id: '4', group_id: '1' } })
      */
-    goTo(target: NavigationNode) {
-        let isDuplicate = false;
-
-        update(state => {
-            // Сравниваем и экраны, чаты и группы
-            const isSameScreen = state.nav_context.screen === target.screen;
-            const isSameChat = state.nav_context.params?.chat_id === target.params?.chat_id;
-            const isSameGroup = state.nav_context.params?.group_id === target.params?.group_id;
-
-            if (isSameScreen && isSameChat && isSameGroup) {
-                isDuplicate = true; // Помечаем, что это дубликат
-                return state;       // Ничего не меняем в памяти
-            }
-
-            // Записываем шаг в историю если юзер меняет экран (уходит из списков в чат или настройки)
-            let updatedHistory = [...state.nav_history];
-            if (state.nav_context.screen !== target.screen) {
-                updatedHistory.push(state.nav_context);
-            }
-            if (updatedHistory.length > 10) updatedHistory.shift();
-
-            return {
-                ...state,
-                nav_context: target,
-                nav_history: updatedHistory
-            };
-        });
-
-        // Если это дубликат или пустой клик по той же вкладке — гасим функцию.
-        if (isDuplicate) return;
-
-        // Шлем запрос на бэк (при явном переходе пользователя — этот метод по-прежнему нужен)
-        this._requestDataForScreen(target);
-    },
-
-    /**
-     * Возврат назад (Движение НАЗАД).
-     * Берет верхний экран из стека истории и переключается на него.
-     */
     goBack() {
         let destination: NavigationNode = { screen: 'chats' };
 
@@ -344,12 +353,45 @@ export const appState = {
             return {
                 ...state,
                 nav_context: destination,
-                nav_history: updatedHistory
+                nav_history: updatedHistory,
+                // Мгновенно чистим активный чат, если уходим на экран списка
+                active_chat: destination.screen === 'chats' ? null : state.active_chat
             };
         });
 
-        // Дёргаем бэк для получения данных старого экрана
         this._requestDataForScreen(destination);
+    },
+
+    goTo(target: NavigationNode) {
+        let isDuplicate = false;
+
+        update(state => {
+            const isSameScreen = state.nav_context.screen === target.screen;
+            const isSameChat = state.nav_context.params?.chat_id === target.params?.chat_id;
+            const isSameGroup = state.nav_context.params?.group_id === target.params?.group_id;
+
+            if (isSameScreen && isSameChat && isSameGroup) {
+                isDuplicate = true;
+                return state;
+            }
+
+            let updatedHistory = [...state.nav_history];
+            if (state.nav_context.screen !== target.screen) {
+                updatedHistory.push(state.nav_context);
+            }
+            if (updatedHistory.length > 10) updatedHistory.shift();
+
+            return {
+                ...state,
+                nav_context: target,
+                nav_history: updatedHistory,
+                // Мгновенно чистим активный чат при любом переходе в список чатов
+                active_chat: target.screen === 'chats' ? null : state.active_chat
+            };
+        });
+
+        if (isDuplicate) return;
+        this._requestDataForScreen(target);
     },
 
     /**

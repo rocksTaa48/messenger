@@ -36,7 +36,7 @@ defmodule MessengerWeb.Actions.BaseActions do
       |> Map.put("chats_list", formatted_chats)
       |> Map.put("group_id", group_id)
       |> Map.put("has_more_chats", has_more)
-      |> Map.delete("active_chat") # Уходим из чата — чистим память от тяжелых сообщений
+      |> Map.put("active_chat", nil) # <--- ИСПРАВЛЕНО: явно отправляем null на фронт
 
     push(socket, "sync", new_state)
     {:reply, :ok, assign(socket, :state, new_state)}

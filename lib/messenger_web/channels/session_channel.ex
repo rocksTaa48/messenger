@@ -127,6 +127,10 @@ defmodule MessengerWeb.SessionChannel do
   end
 
 
+  @doc """
+  Это участок принятия сообщений!!!
+  """
+
   # 1. Пушим событие на фронтенд.
   @impl true
   def handle_info({:ai_token, %{chat_id: chat_id, token: token} = payload}, socket) do
@@ -146,6 +150,24 @@ defmodule MessengerWeb.SessionChannel do
   @impl true
   def handle_info({:ai_stream_done, payload}, socket) do
     push(socket, "ai:stream_done", payload)
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:chat_title_update, %{chat_id: chat_id, title: title}}, socket) do
+    push(socket, "chat_title_update", %{
+      chat_id: to_string(chat_id),
+      title: title
+    })
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:chat_title_error, %{chat_id: chat_id, reason: reason}}, socket) do
+    push(socket, "chat_title_error", %{
+      chat_id: to_string(chat_id),
+      reason: reason
+    })
     {:noreply, socket}
   end
 

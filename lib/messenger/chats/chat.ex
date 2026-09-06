@@ -7,6 +7,8 @@ defmodule Messenger.Chats.Chat do
     field :model_name, :string
     field :summary, :string
     field :summarized_up_to_message_id, :integer
+    field :last_message, :string
+
 
     belongs_to :user, Messenger.Accounts.User
     belongs_to :ai_profile, Messenger.AiProfiles.AiProfile
@@ -27,11 +29,18 @@ defmodule Messenger.Chats.Chat do
       :group_id,
       :summary,
       :summarized_up_to_message_id,
+      :last_message,
     ])
     |> validate_required([:model_name, :user_id, :ai_profile_id])
     |> validate_length(:title, min: 0, max: 100)
     |> foreign_key_constraint(:user_id)
     |> foreign_key_constraint(:ai_profile_id)
     |> foreign_key_constraint(:group_id)
+  end
+
+  def changeset_for_update_last_message(chat, attrs) do
+    chat
+    |> cast(attrs, [:last_message])
+    |> validate_length(:last_message, max: 5000)
   end
 end

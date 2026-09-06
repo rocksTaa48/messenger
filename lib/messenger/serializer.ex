@@ -44,12 +44,8 @@ defmodule Messenger.Serializer do
       "group_id" => chat.group_id || nil,
       "ai_profile_id" => chat.ai_profile_id || nil,
       "cursor_timestamp" => DateTime.to_iso8601(chat.inserted_at),
-      "is_pinned" => Map.get(chat, :is_pinned, false)
-      # "status" => if(chat.has_unread, do: "unread", else: "read"),
-      # "unread_count" => chat.unread_count || 0,
-      # Строковые алиасы для фронтенда, чтобы не тащить JS-классы через JSON
-      # "icon_type" => chat.bot_type || "default", # "bot", "image", "sparkles"
-      # "icon_color" => chat.ui_color || "text-[#2481cc] bg-[#2481cc]/10"
+      "is_pinned" => Map.get(chat, :is_pinned, false),
+      "last_message" => chat.last_message || "Нет сообщений"
     }
   end
 end

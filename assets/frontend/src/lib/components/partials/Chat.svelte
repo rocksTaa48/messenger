@@ -53,7 +53,7 @@
       </span>
         </div>
         <p class="text-xs text-gray-400 truncate pr-4">
-            {chat.body}
+            {chat.last_message || "Нет сообщений"}
         </p>
     </div>
 
