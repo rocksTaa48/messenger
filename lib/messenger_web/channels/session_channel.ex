@@ -142,7 +142,14 @@ defmodule MessengerWeb.SessionChannel do
     {:noreply, socket}
   end
 
-  # 3. фолбэк от неожиданного сообщения
+  # 3. Стрим завершен команда done
+  @impl true
+  def handle_info({:ai_stream_done, payload}, socket) do
+    push(socket, "ai:stream_done", payload)
+    {:noreply, socket}
+  end
+
+  # 4. Фолбэк от неожиданного сообщения
   @impl true
   def handle_info(msg, socket) do
     # Можно оставить просто IO.inspect для отладки, или вообще убрать, если не нужно.

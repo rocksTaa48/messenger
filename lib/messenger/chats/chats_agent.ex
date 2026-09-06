@@ -139,32 +139,53 @@ defmodule Messenger.Chats.ChatsAgent do
       )
 
       full_content = Process.get(:full_content)
-      usage = Process.get(:final_usage) || %{prompt_tokens: 0, completion_tokens: 0, total_tokens: 0}
+      usage = Process.get(:final_usage) || %{
+        "prompt_tokens" => 0,
+        "completion_tokens" => 0,
+        "total_tokens" => 0,
+        "cost_details" => %{}
+      }
 
-      cost_details = usage[:cost_details] || %{}
-      {:ok, _} = Chats.create_assistant_message(%{
+      cost_details = usage["cost_details"] || %{}
+
+      case Chats.create_assistant_message(%{
         chat_id: chat_id,
         content: full_content,
         role: "assistant",
-        tokens_prompt: usage[:prompt_tokens],
-        tokens_completion: usage[:completion_tokens],
-        tokens_total: usage[:total_tokens],
+        tokens_prompt: usage["prompt_tokens"],
+        tokens_completion: usage["completion_tokens"],
+        tokens_total: usage["total_tokens"],
         cost_prompt: cost_details["upstream_inference_prompt_cost"],
         cost_completion: cost_details["upstream_inference_completions_cost"],
         cost_total: usage["cost"]
-      })
+      }) do
+        {:ok, inserted_message} ->
+          Phoenix.PubSub.broadcast(
+            Messenger.PubSub,
+            "user:#{user_id}:lobby",
+            {:ai_stream_done, %{
+              chat_id: chat_id,
+              message_id: inserted_message.id,
+              content: full_content
+            }}
+          )
 
-      Phoenix.PubSub.broadcast(
-        Messenger.PubSub,
-        "user:#{user_id}:lobby",
-        {:ai_stream_done, %{chat_id: chat_id}}
-      )
+        {:error, reason} ->
+          IO.inspect(reason, label: "DB Save Error")
+          # Даже если не сохранили, сообщаем о завершении (но без id)
+          Phoenix.PubSub.broadcast(
+            Messenger.PubSub,
+            "user:#{user_id}:lobby",
+            {:ai_stream_done, %{chat_id: chat_id, content: full_content}}
+          )
+      end
 
     rescue
       e ->
         IO.inspect(e, label: "OpenRouter streaming error")
         send_error_to_lobby(user_id, chat_id, "Ошибка получения ответа")
     after
+      # Всегда очищаем process dictionary
       Process.delete(:sse_buffer)
       Process.delete(:full_content)
       Process.delete(:final_usage)
@@ -203,7 +224,7 @@ defmodule Messenger.Chats.ChatsAgent do
                 Phoenix.PubSub.broadcast(
                   Messenger.PubSub,
                   "user:#{user_id}:lobby",
-                  {:ai_token, %{chat_id: chat_id, token: content}}
+                  {:ai_token, %{chat_id: to_string(chat_id), token: content}}
                 )
               _ ->
                 :ok

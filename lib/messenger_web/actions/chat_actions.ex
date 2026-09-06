@@ -112,7 +112,7 @@ defmodule MessengerWeb.Actions.ChatActions do
           |> Map.put("active_chat", %{
             "id" => updated_or_new_chat.id,
             "group_id" => updated_or_new_chat.group_id,
-            "messages_list" => messages
+            "messages" => messages
           })
 
         {:reply, {:ok, new_state}, assign(socket, :state, new_state)}

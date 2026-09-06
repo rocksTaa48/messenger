@@ -38,7 +38,13 @@ export interface AppState {
         display_description: string;
     }>;
     groups: Array<{ id: string; title: string }>;
-    active_chat: { id: string; messages: Array<{ id: number; content: string; role: string, created_at: string;}> } | null;
+    active_chat: { id: string; messages: Array<{
+        id: number;
+        content: string;
+        role: string;
+        created_at: string;
+        is_streaming?: boolean; // Ответ все еще стримится или уже нет.
+    }> } | null;
     has_more_chats: boolean;
     settings: { theme: string; lang: string };
 }
@@ -121,6 +127,78 @@ export const appState = {
             .receive('error', () => {
                 update(state => ({ ...state, status: 'error' }));
             });
+
+        // Обработка потока токенов в чат (генерация ответа от ИИ) --------------------->
+        channel.on('ai:token', (payload: { chat_id: string; token: string }) => {
+            update(state => {
+                // Игнорируем, если токен не для активного чата
+                if (!state.active_chat || state.active_chat.id !== payload.chat_id) {
+                    return state;
+                }
+
+                const messages = [...state.active_chat.messages];
+                const lastMsg = messages[messages.length - 1];
+
+                if (lastMsg && lastMsg.role === 'assistant' && lastMsg.is_streaming) {
+                    // Дописываем к существующему потоковому сообщению
+                    lastMsg.content += payload.token;
+                } else {
+                    // Создаём новое потоковое сообщение
+                    messages.push({
+                        id: -Date.now(), // временный отрицательный ID
+                        role: 'assistant',
+                        content: payload.token,
+                        created_at: new Date().toISOString(),
+                        is_streaming: true
+                    });
+                }
+
+                return {
+                    ...state,
+                    active_chat: {
+                        ...state.active_chat,
+                        messages
+                    }
+                };
+            });
+        });
+
+        // Завершение генерации
+        channel.on('ai:stream_done', (payload: { chat_id: string; message_id?: number; content?: string }) => {
+            update(state => {
+                if (!state.active_chat || state.active_chat.id !== payload.chat_id) {
+                    return state;
+                }
+
+                const messages = state.active_chat.messages.map(msg => {
+                    // Находим последнее потоковое сообщение ассистента и завершаем его
+                    if (msg.role === 'assistant' && msg.is_streaming) {
+                        return {
+                            ...msg,
+                            id: payload.message_id || msg.id,
+                            content: payload.content || msg.content,
+                            is_streaming: false
+                        };
+                    }
+                    return msg;
+                });
+
+                return {
+                    ...state,
+                    active_chat: {
+                        ...state.active_chat,
+                        messages
+                    }
+                };
+            });
+        });
+
+        // Ошибка генерации
+        channel.on('ai:stream_error', (payload: { chat_id: string; reason: string }) => {
+            // Просто логируем или можно показать уведомление
+            console.error('AI stream error:', payload);
+            // При желании можно добавить сообщение об ошибке в чат
+        });
     },
 
     send(event: string, payload: object = {}) {
