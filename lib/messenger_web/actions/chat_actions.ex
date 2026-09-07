@@ -13,29 +13,63 @@ defmodule MessengerWeb.Actions.ChatActions do
     chat = Chats.get_chat(current_user.id, chat_id)
 
     messages = Chats.get_chat_messages(chat_id, current_user.id)
+    serialized_messages = Enum.map(messages, &Serializer.message_serialize/1)
 
-    serialized_messages =
-      case messages do
-        {:error, _} -> []
-        msgs -> Enum.map(msgs, &Serializer.message_serialize/1)
-      end
+    new_state =
+      socket.assigns.state
+      |> Map.put("active_chat", %{
+        "id" => chat_id,
+        "group_id" => chat.group_id,
+        "messages" => serialized_messages,
+        "has_more_messages" => length(serialized_messages) >= 15
+      })
 
-    new_state = socket.assigns.state
-
-                |> Map.put("active_chat", %{
-      "id" => chat_id,
-      "group_id" => chat.group_id,
-      "messages" => serialized_messages
-    })
-
-    IO.inspect(serialized_messages, label: "SERIALIZED MESSAGES")
-
-
-    # Шлем обновленный монолит-стейт во фронтенд
     push(socket, "sync", new_state)
-
-    # Сохраняем обновленное состояние в процессе сокета
     {:reply, :ok, assign(socket, :state, new_state)}
+  end
+
+  def handle_in("load_more_messages", payload, socket) do
+    IO.inspect(payload, label: "CHAT ACTIONS LOAD MORE")
+
+    current_user = socket.assigns.current_user
+    current_active_chat = socket.assigns.state["active_chat"]
+    current_messages = current_active_chat["messages"]
+    chat_id = String.to_integer(payload["chat_id"])
+
+    case List.first(current_messages) do
+      nil ->
+        {:noreply, socket}
+
+      oldest_message ->
+        # Берем курсор из первого (самого старого) сообщения
+        cursor = oldest_message["cursor_timestamp"]
+
+        # Преобразуем строку в DateTime
+        cursor_dt = case DateTime.from_iso8601(cursor) do
+          {:ok, dt, _} -> dt
+          _ -> nil
+        end
+
+        older_messages = Chats.get_chat_messages(chat_id, current_user.id, 15, cursor_dt)
+        formatted_older = Enum.map(older_messages, &Serializer.message_serialize/1)
+
+        if Enum.empty?(formatted_older) do
+          new_active_chat = Map.put(current_active_chat, "has_more_messages", false)
+          new_state = Map.put(socket.assigns.state, "active_chat", new_active_chat)
+          push(socket, "sync", new_state)
+          {:reply, :ok, assign(socket, :state, new_state)}
+        else
+          updated_messages = formatted_older ++ current_messages
+
+          new_active_chat = current_active_chat
+                            |> Map.put("messages", updated_messages)
+                            |> Map.put("has_more_messages", length(formatted_older) >= 15)
+
+          new_state = Map.put(socket.assigns.state, "active_chat", new_active_chat)
+          push(socket, "sync", new_state)
+          {:reply, :ok, assign(socket, :state, new_state)}
+        end
+    end
   end
 
 

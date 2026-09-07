@@ -37,7 +37,7 @@ defmodule Messenger.Chats.Message do
     |> validate_required([:role, :content, :chat_id])
     |> validate_inclusion(:role, ["system", "user", "assistant"])
     |> validate_inclusion(:status, ["pending", "send", "error"])
-    |> validate_length(:content, min: 1, max: 2048)
+    |> validate_length(:content, min: 1, max: 8192)
     |> foreign_key_constraint(:chat_id)
   end
 end

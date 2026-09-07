@@ -6,7 +6,8 @@ defmodule Messenger.Serializer do
       "id" => to_string(message.id),
       "content" => message.content,
       "role" => message.role,
-      "created_at" => DateTime.to_iso8601(message.inserted_at)
+      "created_at" => DateTime.to_iso8601(message.inserted_at),
+      "cursor_timestamp" => DateTime.to_iso8601(message.inserted_at)
     }
   end
 

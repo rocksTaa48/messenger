@@ -39,13 +39,16 @@ export interface AppState {
         display_description: string;
     }>;
     groups: Array<{ id: string; title: string }>;
-    active_chat: { id: string; title: string; messages: Array<{
-        id: number;
-        content: string;
-        role: string;
-        created_at: string;
-        is_streaming?: boolean; // Ответ все еще стримится или уже нет.
-    }> } | null;
+    active_chat: { id: string; title: string;
+        messages: Array<{
+            id: number;
+            content: string;
+            role: string;
+            created_at: string;
+            is_streaming?: boolean; // Ответ все еще стримится или уже нет.
+        }>;
+        has_more_messages?: boolean;
+    } | null;
     has_more_chats: boolean;
     settings: { theme: string; lang: string };
 }
@@ -60,6 +63,7 @@ const initialValue: AppState = {
     groups: [],
     active_chat: null,
     has_more_chats: false,
+    has_more_messages: false,
     settings: { theme: 'dark', lang: 'ru' }
 };
 
@@ -129,15 +133,15 @@ export const appState = {
                 update(state => ({ ...state, status: 'error' }));
             });
 
-        // УЧАСТОК: Обработка потока токенов в чат ------------------------------>
+        // УЧАСТОК: Обработка токенов в чат ------------------------------>
+        // 1. Обработка потока токенов
         channel.on('ai:token', (payload: { chat_id: string; token: string }) => {
             update(state => {
                 if (!state.active_chat) return state;
 
                 const currentId = state.active_chat.id;
-
-                // 🛡️ БЕЗОПАСНАЯ ПРОВЕРКА: Игнорируем, только если ID есть и он НЕ совпадает.
-                if (currentId && currentId !== payload.chat_id) {
+                // Приводим к строке
+                if (currentId && String(currentId) !== String(payload.chat_id)) {
                     return state;
                 }
 
@@ -158,24 +162,19 @@ export const appState = {
 
                 return {
                     ...state,
-                    active_chat: {
-                        ...state.active_chat,
-                        id: payload.chat_id, // 🎯 Усыновляем ID (или перезаписываем тем же самым)
-                        messages
-                    }
+                    active_chat: { ...state.active_chat, id: payload.chat_id, messages }
                 };
             });
         });
 
-        // Завершение генерации текста от модели на запрос пользователя
+        // 2. Завершение генерации
         channel.on('ai:stream_done', (payload: { chat_id: string; message_id?: number; content?: string }) => {
             update(state => {
                 if (!state.active_chat) return state;
 
                 const currentId = state.active_chat.id;
-
-                // 🛡️ БЕЗОПАСНАЯ ПРОВЕРКА
-                if (currentId && currentId !== payload.chat_id) {
+                // Приводим ID к строке
+                if (currentId && String(currentId) !== String(payload.chat_id)) {
                     return state;
                 }
 
@@ -193,20 +192,32 @@ export const appState = {
 
                 return {
                     ...state,
-                    active_chat: {
-                        ...state.active_chat,
-                        id: payload.chat_id, // 🎯 Усыновляем ID
-                        messages
-                    }
+                    active_chat: { ...state.active_chat, id: payload.chat_id, messages }
                 };
             });
         });
 
-        // Ошибка генерации от модели на запрос пользователя
+        // 3. Ошибка генерации
         channel.on('ai:stream_error', (payload: { chat_id: string; reason: string }) => {
-            // Просто логируем или можно показать уведомление
             console.error('AI stream error:', payload);
-            // При желании можно добавить сообщение об ошибке в чат
+            update(state => {
+                if (!state.active_chat) return state;
+
+                const currentId = state.active_chat.id;
+                if (currentId && String(currentId) !== String(payload.chat_id)) {
+                    return state;
+                }
+
+                // На всякий случай снимаем флаг стрима, если он вдруг остался
+                const messages = state.active_chat.messages.map(msg => {
+                    if (msg.role === 'assistant' && msg.is_streaming) {
+                        return { ...msg, is_streaming: false };
+                    }
+                    return msg;
+                });
+
+                return { ...state, active_chat: { ...state.active_chat, messages } };
+            });
         });
 
         // Обработка успешного обновления названия чата от модели (она генерит название)
@@ -214,14 +225,14 @@ export const appState = {
             update(state => {
                 const targetId = String(payload.chat_id);
 
-                // 1. Обновляем в общем списке (с защитой от undefined/null)
+                // Обновляем в общем списке (с защитой от undefined/null)
                 const updatedChatsList = state.chats_list.map(chat =>
                     (chat.id && String(chat.id) === targetId)
                         ? { ...chat, title: payload.title }
                         : chat
                 );
 
-                // 2. 🚀 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Обновляем и active_chat, если это он!
+                // Обновляем и active_chat, если это он!
                 let updatedActiveChat = state.active_chat;
                 if (state.active_chat && String(state.active_chat.id) === targetId) {
                     updatedActiveChat = {

@@ -21,7 +21,7 @@
         >
             <p class="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
             <span class="text-[9px] font-bold ml-2 mt-1 float-right select-none opacity-40">
-                {formatTime(msg.created_at)}
+                {msg.id}
             </span>
         </div>
     </div>

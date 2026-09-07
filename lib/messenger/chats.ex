@@ -166,6 +166,7 @@ defmodule Messenger.Chats do
   """
   def get_chat_messages(chat_id, user_id, limit \\ 15, before_cursor \\ nil) do
     query = from m in Message,
+                 where: m.role in ["user", "assistant"], # Исключаем system, его незачем видеть пользователю
                  join: c in Chat, on: m.chat_id == c.id,
                  where: c.id == ^chat_id and c.user_id == ^user_id,
                  order_by: [desc: m.inserted_at],
@@ -178,10 +179,8 @@ defmodule Messenger.Chats do
         query
       end
 
-    case Repo.all(query) do
-      [] -> {:error, :not_found}
-      messages -> Enum.reverse(messages)
-    end
+    Repo.all(query)
+    |> Enum.reverse()
   end
 
   def get_last_message(chat_id) do
