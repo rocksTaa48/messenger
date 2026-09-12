@@ -9,7 +9,7 @@ defmodule Messenger.Accounts.User do
     field :last_name, :string
     field :phone, :string
     field :role, :string
-    field :status, :string
+    field :status, :string, default: "free"
     field :raw_data, :map
 
     has_many :groups, Messenger.Chats.Group

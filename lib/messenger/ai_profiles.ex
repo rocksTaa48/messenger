@@ -3,6 +3,7 @@ defmodule Messenger.AiProfiles do
   alias Messenger.Repo
   alias Messenger.AiProfiles.AiProfile
   alias Messenger.AiProfiles.Prompt
+  alias Messenger.AiProfiles.AiModel
 
 
 
@@ -10,39 +11,39 @@ defmodule Messenger.AiProfiles do
   def available_user_profiles(user_status) do
     AiProfile
     |> where(is_active: true, is_public: true)
-    |> tier_filter(user_status)
+    |> where(tier: ^user_status)
+    |> preload([:ai_model, :prompt])
     |> Repo.all()
   end
 
-  defp tier_filter(query, "free") do
-    query |> where(tier: "free")
-  end
-
-  defp tier_filter(query, "private") do
-    query |> where(tier: "private")
-  end
-
-  defp tier_filter(_query, _other) do
-    where([], false)
-  end
-
-  # Достаем профиль по умолчанию для тарифного плана пользователя по его "status"
-  def get_default_ai_profile(user_status) do
+  # Достаем профиль по умолчанию для чата пользователя соглано тарифного плана по его "status"
+  def get_default_chat_user_ai_profile(user_status) do
     AiProfile
     |> where(is_active: true, is_public: true)
     |> where(tier: ^user_status)
-    |> where(is_default_for_tier: true)
+    |> where(is_default: true)
+    |> where(purpose: "system_prompt")
+    |> preload([:ai_model, :prompt])
+    |> Repo.one()
+  end
+
+  # Достаем профиль по умолчанию для системных событий пользователя по его "status"
+  def get_default_system_user_ai_profile(user_status, purpose) do
+    AiProfile
+    |> where(is_active: true)
+    |> where(tier: ^user_status)
+    |> where(is_default: true)
+    |> where(purpose: ^purpose)
+    |> preload([:ai_model, :prompt])
     |> Repo.one()
   end
 
   # Достаем конкретный профиль по id
   def get_ai_profile(ai_profile_id) do
-    Repo.get(AiProfile, ai_profile_id)
-  end
-
-  # Достаем конкретный профиль по ai_profile_id
-  def get_system_prompt(id) do
-    Repo.get(Prompt, id)
+    AiProfile
+    |> where(id: ^ai_profile_id)
+    |> preload([:ai_model, :prompt])
+    |> Repo.one()
   end
 
 end

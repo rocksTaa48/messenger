@@ -37,4 +37,26 @@ defmodule Messenger.AiProfilesFixtures do
 
     prompt
   end
+
+  @doc """
+  Generate a ai_model.
+  """
+  def ai_model_fixture(attrs \\ %{}) do
+    {:ok, ai_model} =
+      attrs
+      |> Enum.into(%{
+        config: %{},
+        cost_currency: "some cost_currency",
+        cost_per_1m_input: "120.5",
+        cost_per_1m_output: "120.5",
+        cost_updated_at: "some cost_updated_at",
+        is_active: true,
+        model_name: "some model_name",
+        openrouter_model_id: "some openrouter_model_id",
+        provider: "some provider"
+      })
+      |> Messenger.AiProfiles.create_ai_model()
+
+    ai_model
+  end
 end

@@ -10,14 +10,11 @@ defmodule Messenger.Chats.ChatNameCreator do
   defp process_generation(user_id, chat_id, ai_profile, text) do
     url = "https://openrouter.ai/api/v1/chat/completions"
     api_key = Application.get_env(:messenger, :ai_providers)[:openrouter_api_key]
+    content = ai_profile.prompt.content
 
     body = %{
-             model: ai_profile.openrouter_model_id,
-             messages: [%{role: "system", content: "Ты — ассистент для создания названий чатов.
-              Проанализируй первое сообщение пользователя.
-               Придумай короткое название чата (максимум 3-5 слов).
-                Не используй кавычки, не пиши 'Чат о...', просто суть.
-                Язык используй тот же на котором написан текст пользователя."},
+             model: ai_profile.ai_model.openrouter_model_id,
+             messages: [%{role: "system", content: content},
                %{role: "user", content: text}],
              temperature: ai_profile.temperature,
              top_p: ai_profile.top_p,

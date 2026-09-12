@@ -1,29 +1,44 @@
 defmodule Messenger.Chats.ChatSummaryCreator do
   alias Messenger.Chats
 
-  def start_generation(user_id, chat_id, ai_profile, context) do
+
+  def start_generation(user_id, chat_id, ai_profile, %{summary: summary, context: context, last_msg_id: last_msg_id}) do
     Task.Supervisor.start_child(Messenger.TaskSupervisor, fn ->
-      process_generation(user_id, chat_id, ai_profile, context)
+      process_generation(user_id, chat_id, ai_profile, %{summary: summary, context: context, last_msg_id: last_msg_id})
     end)
   end
 
-  defp process_generation(user_id, chat_id, ai_profile, context) do
+  defp process_generation(user_id, chat_id, ai_profile, %{summary: summary, context: context, last_msg_id: last_msg_id}) do
     url = "https://openrouter.ai/api/v1/chat/completions"
     api_key = Application.get_env(:messenger, :ai_providers)[:openrouter_api_key]
+    prompt_content = ai_profile.prompt.content
+    model = ai_profile.ai_model.openrouter_model_id
+
+    dialogue_text =
+      context
+      |> Enum.map_join("\n\n", fn m -> "#{m.role}: #{m.content}" end)
+
+    user_content = """
+    === СТАРОЕ САММАРИ ===
+    #{summary || "(нет)"}
+    === КОНЕЦ ===
+
+    === ДИАЛОГ ДЛЯ СЖАТИЯ ===
+    #{dialogue_text}
+    === КОНЕЦ ===
+
+    Обнови саммари с учётом новых сообщений выше.
+    Верни ТОЛЬКО текст обновлённого саммари, без преамбул и вопросов.
+    """
+    complete_context = [
+      %{role: "system", content: prompt_content},
+      %{role: "user",   content: user_content}
+    ]
+
 
     body = %{
-             model: ai_profile.openrouter_model_id,
-             messages: [%{role: "system", content: "Твоя задача — создать краткое, структурированное резюме (Summary)
-              для передачи контекста другому ассистенту или для следующей сессии.
-              Требования к резюме:
-              1. Определи основную цель диалога (чего хочет пользователь).
-              2. Перечисли важные данные, имена, даты, цифры или технические детали, которые упоминались.
-              3. Опиши, к чему пришли стороны (если решения были).
-              4. На каком этапе находится задача/разговор прямо сейчас?
-              5. Что нужно сделать дальше? (Если это указано или очевидно).
-              Игнорируй 'воду', приветствия и нерелевантные отступления. Пиши от третьего лица.
-              Старайся уложиться 9 - 12 предложений."},
-               %{role: "user", content: context}],
+             model: model,
+             messages: complete_context,
              temperature: ai_profile.temperature,
              top_p: ai_profile.top_p,
              frequency_penalty: ai_profile.frequency_penalty,
@@ -32,6 +47,7 @@ defmodule Messenger.Chats.ChatSummaryCreator do
            }
            |> Enum.filter(fn {_k, v} -> not is_nil(v) end)
            |> Enum.into(%{})
+    IO.inspect(complete_context, label: "CONTEXT SUMMARY")
 
     case Req.post(url,
            json: body,
@@ -44,25 +60,15 @@ defmodule Messenger.Chats.ChatSummaryCreator do
            ]
          ) do
       {:ok, %Req.Response{status: 200, body: %{"choices" => [%{"message" => %{"content" => content}}]}}} ->
-        {:ok, _} = Chats.update_chat( chat_id, user_id, %{ summary: content })
-
+        {:ok, _} = Chats.update_chat( chat_id, user_id, %{ summary: content, summarized_up_to_message_id: last_msg_id })
         {:ok, %{chat_id: chat_id, summary: content} }
-
       {:ok, %Req.Response{status: status, body: body}} ->
-        IO.inspect({status, body}, label: "OpenRouter HTTP Error")
-        send_error_to_lobby(user_id, chat_id, "API ошибка: #{status}")
+        Logger.error("Summary AI error #{status}: #{inspect(body)}")
+        {:error, {:http_error, status}}
 
-      {:error, error} ->
-        IO.inspect(error, label: "OpenRouter Network Error")
-        send_error_to_lobby(user_id, chat_id, "Сетевая ошибка")
+      {:error, reason} ->
+        Logger.error("Summary AI request failed: #{inspect(reason)}")
+        {:error, reason}
     end
-  end
-
-  defp send_error_to_lobby(user_id, chat_id, reason) do
-    Phoenix.PubSub.broadcast(
-      Messenger.PubSub,
-      "user:#{user_id}:lobby",
-      {:chat_title_error, %{chat_id: chat_id, reason: reason}}
-    )
   end
 end

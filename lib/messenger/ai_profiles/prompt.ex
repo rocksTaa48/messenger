@@ -8,7 +8,7 @@ defmodule Messenger.AiProfiles.Prompt do
     field :content, :string
     field :version, :integer
     field :is_active, :boolean, default: false
-    field :metadata, :map
+    field :metadata, :map, default: %{}
     has_many :ai_profiles, Messenger.AiProfiles.AiProfile
 
     timestamps(type: :utc_datetime)

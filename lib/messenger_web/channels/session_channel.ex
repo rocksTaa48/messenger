@@ -78,22 +78,22 @@ defmodule MessengerWeb.SessionChannel do
   # Если: Юзер был внутри конкретного чата, мы восстанавливаем его
   defp build_state_for_screen("inside_chat", params, base_state, user_id) do
     chat_id = Map.get(params, "chat_id")
+    group_id = Map.get(params, "group_id")
+    chat = Chats.get_chat(user_id, chat_id)
 
-    # 1. Загружаем чаты (базовый список для боковой панели/фона все равно нужен)
-    chats = Chats.list_user_chats(user_id)
-    formatted_chats = Enum.map(chats, &Serializer.chat_serialize/1)
-
-    # 2. Загружаем данные САМОГО активного чата вместе с сообщениями
-    # Сюда подставьте ваш метод получения чата, например: Chats.get_active_chat_with_messages(chat_id)
-    active_chat_data = case Chats.get_chat_with_messages(chat_id) do
+    # Загружаем сообщения активного чата
+    active_chat_data = case Chats.get_chat_messages(chat_id, user_id) do
       nil -> nil
-      chat -> Serializer.active_chat_serialize(chat) # Ваша сериализация активного чата
+      chat -> Enum.map(chat, &Serializer.message_serialize/1) # Сериализация активного чата
     end
 
     base_state
-    |> Map.put("chats_list", formatted_chats)
-    |> Map.put("has_more_chats", length(formatted_chats) >= 15)
-    |> Map.put("active_chat", active_chat_data)
+    |> Map.put("active_chat", %{
+      "id" => chat_id,
+      "group_id" => chat.group_id,
+      "messages" => active_chat_data,
+      "has_more_messages" => length(active_chat_data) >= 15
+    })
   end
 
   # Если: Юзер был в настройках

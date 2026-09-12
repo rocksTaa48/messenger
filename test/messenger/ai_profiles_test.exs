@@ -122,4 +122,74 @@ defmodule Messenger.AiProfilesTest do
       assert %Ecto.Changeset{} = AiProfiles.change_prompt(prompt)
     end
   end
+
+  describe "ai_models" do
+    alias Messenger.AiProfiles.AiModel
+
+    import Messenger.AiProfilesFixtures
+
+    @invalid_attrs %{config: nil, provider: nil, model_name: nil, openrouter_model_id: nil, is_active: nil, cost_per_1m_input: nil, cost_per_1m_output: nil, cost_currency: nil, cost_updated_at: nil}
+
+    test "list_ai_models/0 returns all ai_models" do
+      ai_model = ai_model_fixture()
+      assert AiProfiles.list_ai_models() == [ai_model]
+    end
+
+    test "get_ai_model!/1 returns the ai_model with given id" do
+      ai_model = ai_model_fixture()
+      assert AiProfiles.get_ai_model!(ai_model.id) == ai_model
+    end
+
+    test "create_ai_model/1 with valid data creates a ai_model" do
+      valid_attrs = %{config: %{}, provider: "some provider", model_name: "some model_name", openrouter_model_id: "some openrouter_model_id", is_active: true, cost_per_1m_input: "120.5", cost_per_1m_output: "120.5", cost_currency: "some cost_currency", cost_updated_at: "some cost_updated_at"}
+
+      assert {:ok, %AiModel{} = ai_model} = AiProfiles.create_ai_model(valid_attrs)
+      assert ai_model.config == %{}
+      assert ai_model.provider == "some provider"
+      assert ai_model.model_name == "some model_name"
+      assert ai_model.openrouter_model_id == "some openrouter_model_id"
+      assert ai_model.is_active == true
+      assert ai_model.cost_per_1m_input == Decimal.new("120.5")
+      assert ai_model.cost_per_1m_output == Decimal.new("120.5")
+      assert ai_model.cost_currency == "some cost_currency"
+      assert ai_model.cost_updated_at == "some cost_updated_at"
+    end
+
+    test "create_ai_model/1 with invalid data returns error changeset" do
+      assert {:error, %Ecto.Changeset{}} = AiProfiles.create_ai_model(@invalid_attrs)
+    end
+
+    test "update_ai_model/2 with valid data updates the ai_model" do
+      ai_model = ai_model_fixture()
+      update_attrs = %{config: %{}, provider: "some updated provider", model_name: "some updated model_name", openrouter_model_id: "some updated openrouter_model_id", is_active: false, cost_per_1m_input: "456.7", cost_per_1m_output: "456.7", cost_currency: "some updated cost_currency", cost_updated_at: "some updated cost_updated_at"}
+
+      assert {:ok, %AiModel{} = ai_model} = AiProfiles.update_ai_model(ai_model, update_attrs)
+      assert ai_model.config == %{}
+      assert ai_model.provider == "some updated provider"
+      assert ai_model.model_name == "some updated model_name"
+      assert ai_model.openrouter_model_id == "some updated openrouter_model_id"
+      assert ai_model.is_active == false
+      assert ai_model.cost_per_1m_input == Decimal.new("456.7")
+      assert ai_model.cost_per_1m_output == Decimal.new("456.7")
+      assert ai_model.cost_currency == "some updated cost_currency"
+      assert ai_model.cost_updated_at == "some updated cost_updated_at"
+    end
+
+    test "update_ai_model/2 with invalid data returns error changeset" do
+      ai_model = ai_model_fixture()
+      assert {:error, %Ecto.Changeset{}} = AiProfiles.update_ai_model(ai_model, @invalid_attrs)
+      assert ai_model == AiProfiles.get_ai_model!(ai_model.id)
+    end
+
+    test "delete_ai_model/1 deletes the ai_model" do
+      ai_model = ai_model_fixture()
+      assert {:ok, %AiModel{}} = AiProfiles.delete_ai_model(ai_model)
+      assert_raise Ecto.NoResultsError, fn -> AiProfiles.get_ai_model!(ai_model.id) end
+    end
+
+    test "change_ai_model/1 returns a ai_model changeset" do
+      ai_model = ai_model_fixture()
+      assert %Ecto.Changeset{} = AiProfiles.change_ai_model(ai_model)
+    end
+  end
 end

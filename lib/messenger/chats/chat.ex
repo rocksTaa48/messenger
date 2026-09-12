@@ -31,7 +31,7 @@ defmodule Messenger.Chats.Chat do
       :summarized_up_to_message_id,
       :last_message,
     ])
-    |> validate_required([:model_name, :user_id, :ai_profile_id])
+    |> validate_required([:user_id])
     |> validate_length(:title, min: 0, max: 100)
     |> foreign_key_constraint(:user_id)
     |> foreign_key_constraint(:ai_profile_id)
@@ -42,5 +42,11 @@ defmodule Messenger.Chats.Chat do
     chat
     |> cast(attrs, [:last_message])
     |> validate_length(:last_message, max: 5000)
+  end
+
+  def changeset_for_update_summary(chat, attrs) do
+    chat
+    |> cast(attrs, [:summary, :summarized_up_to_message_id])
+    |> validate_length(:summary, min: 10, max: 8000)
   end
 end

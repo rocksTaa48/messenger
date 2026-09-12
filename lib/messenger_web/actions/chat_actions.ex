@@ -97,12 +97,15 @@ defmodule MessengerWeb.Actions.ChatActions do
     chat_id = Map.get(payload, "chat_id")
     content = Map.get(payload, "text")
     ai_profile_id = Map.get(payload, "ai_profile_id")
+
     # Проверяем есть ли чат? Тоесть будет выполнено добавление сообщения в текущий чат или создание нового
     chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
+
     # Достаем AI профиль текущего чата, если таковой имеется
     chat_ai_profile_id = if chat, do: chat.ai_profile_id, else: nil
 
     available_user_ai_profiles = AiProfiles.available_user_profiles(current_user.status)
+
     available_ai_profiles_ids = Enum.map(available_user_ai_profiles, fn profile -> profile.id end)
 
     # Здесь может не красиво, зато наглядно мы ищем AI профиль,
@@ -111,28 +114,33 @@ defmodule MessengerWeb.Actions.ChatActions do
       case ai_profile_id do
         nil -> nil
         profile_id ->
-          if profile_id in available_ai_profiles_ids, do: AiProfiles.get_ai_profile(profile_id), else: nil
+          if profile_id in available_ai_profiles_ids do
+            Enum.find(available_user_ai_profiles, fn profile -> profile.id == profile_id end)
+          else
+            nil
+          end
       end
+
       |> case do
            nil ->
              if chat_id && chat_ai_profile_id in available_ai_profiles_ids do
-               AiProfiles.get_ai_profile(chat_ai_profile_id)
+               Enum.find(available_user_ai_profiles, fn profile -> profile.id == chat_ai_profile_id end)
              else
                nil
              end
            profile -> profile
          end
       |> case do
-           nil -> AiProfiles.get_default_ai_profile(current_user.status)
+           nil -> AiProfiles.get_default_chat_user_ai_profile(current_user.status)
            profile -> profile
          end
 
     action =
       case chat do
         nil ->
-          create_chat_and_first_message(current_user.id, ai_profile, content)
+          create_chat_and_first_message(current_user, ai_profile, content)
         existing_chat ->
-          create_message_in_existing_chat(current_user.id, ai_profile, existing_chat, content)
+          create_message_in_existing_chat(current_user, ai_profile, existing_chat, content)
       end
 
     case action do
@@ -150,21 +158,21 @@ defmodule MessengerWeb.Actions.ChatActions do
   end
 
   # Хелпер: создание нового сообщения в новом чате
-  defp create_chat_and_first_message(user_id, ai_profile, content) do
-    prompt = AiProfiles.get_system_prompt(ai_profile.prompt_id)
+  defp create_chat_and_first_message(user, ai_profile, content) do
+
+    naming_ai_profile =  AiProfiles.get_default_system_user_ai_profile(user.status, "naming")
 
     case Chats.first_time_create_chat_and_message(
-           user_id,
+           user.id,
            ai_profile.id,
-           ai_profile.openrouter_model_id,
-           prompt.content,
+           ai_profile.ai_model.openrouter_model_id,
+           ai_profile.prompt.content,
            content
          ) do
-      {:ok, %{chat: chat, content: message}} ->
-        IO.inspect("✅ Чат создан, ID: #{chat.id}. Сейчас вызовем ChatAgent...", label: "DEBUG")
+      {:ok, %{chat: chat, message: message}} ->
         context = Chats.get_ai_context(chat.id)
-        Chats.ChatsAgent.start_and_process(user_id, chat.id, ai_profile, context)
-        Chats.ChatNameCreator.start_generation(user_id, chat.id, ai_profile, content)
+        Chats.ChatsAgent.start_and_process(user.id, chat.id, ai_profile, context)
+        Chats.ChatNameCreator.start_generation(user.id, chat.id, naming_ai_profile, content)
         {:ok, chat, message}
       {:error, _failed_step, _failed_value, _changesets} ->
         {:error, "db_insert_failed"}
@@ -172,18 +180,42 @@ defmodule MessengerWeb.Actions.ChatActions do
   end
 
   # Хелпер: создание нового сообщения в уже существующем чате
-  defp create_message_in_existing_chat(user_id, ai_profile, chat, content) do
-
+  defp create_message_in_existing_chat(user, ai_profile, chat, content) do
     case Chats.create_message(chat.id, content) do
       {:ok, message} ->
         context = Chats.get_ai_context(chat.id)
-        Chats.ChatsAgent.start_and_process(user_id, chat.id, ai_profile, context)
-
-        IO.inspect(context, label: "CONTEXT MESSAGES")
-
+        Chats.ChatsAgent.start_and_process(user.id, chat.id, ai_profile, context)
+        start_summary(user, chat)
         {:ok, chat, message}
       {:error, _changeset} ->
         {:error, "message_insert_failed"}
+    end
+  end
+
+  # Хелпер: создание саммари для чата
+  defp start_summary(user, chat) do
+    count = Chats.get_messages_each_summary(chat.id, chat.summarized_up_to_message_id)
+
+    if count >= 20 do
+      # получаем системный профиль для суммаризатора
+      summary_ai_profile = AiProfiles.get_default_system_user_ai_profile(user.status, "summary")
+      # get_messages_for_summary/3 отдает не только последние сообщения от summarized_up_to_message_id,
+      # но и старый summary что бы его не забыть.
+      summary_context = Chats.get_messages_for_summary(chat.id, chat.summarized_up_to_message_id, chat.summary)
+
+      case summary_context do
+        {:ok, %{context: [], last_msg_id: nil}} ->
+          :ok
+        {:ok, %{summary: summary, context: context, last_msg_id: last_msg_id}} ->
+          Chats.ChatSummaryCreator.start_generation(
+            user.id,
+            chat.id,
+            summary_ai_profile,
+            %{summary: summary, context: context, last_msg_id: last_msg_id}
+          )
+        {:error, _} ->
+          :ok
+      end
     end
   end
 

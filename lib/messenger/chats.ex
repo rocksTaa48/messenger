@@ -18,7 +18,17 @@ defmodule Messenger.Chats do
   - Если 1-го системного сообщения нет -> отдаются последние N сообщений
   """
   def get_ai_context(chat_id) do
-    # 1) Проверяем первое сообщение в чате
+    # 1) Достаем старый саммари
+    chat = Chat
+              |> where(id: ^chat_id)
+              |> Repo.one()
+    summary = case chat.summary do
+      nil -> nil
+      "" -> nil
+      summary -> summary
+    end
+
+    # 2) Проверяем первое сообщение в чате
     first_message =
       Message
 
@@ -28,7 +38,7 @@ defmodule Messenger.Chats do
 
       |> Repo.one()
 
-    # 2) Вытаскиваем хвост из последних 20 сообщений диалог user и assistant
+    # 3) Вытаскиваем хвост из последних 20 сообщений диалог user и assistant
     recent_messages =
       Message
       |> where(chat_id: ^chat_id)
@@ -40,7 +50,7 @@ defmodule Messenger.Chats do
 
       |> Enum.reverse() # Разворачиваем хвост в хронологическом порядке
 
-    # 3) Форматируем хвост для API
+    # 4) Форматируем хвост для API
     formatted_tail = Enum.map(recent_messages, fn msg ->
       %{role: msg.role, content: msg.content}
     end)
@@ -49,8 +59,11 @@ defmodule Messenger.Chats do
     case first_message do
       %Message{role: "system"} = sys_msg ->
         # Сценарий с промптом, обязательно ставим его в начало массива
-        [%{role: "system", content: sys_msg.content} | formatted_tail]
-
+        if summary do
+          [%{role: "system", content: sys_msg.content <> "\n\nВот краткое резюме нашего диалога:\n\n" <> summary} | formatted_tail]
+        else
+          [%{role: "system", content: sys_msg.content} | formatted_tail]
+        end
       _other ->
         # Если без промпта, отдаем только последние сообщения диалога
         formatted_tail
@@ -191,6 +204,52 @@ defmodule Messenger.Chats do
       |> Repo.one()
   end
 
+  @doc"""
+  Блок для получения суммаризации чата
+  """
+  def get_messages_each_summary(chat_id, chat_summarized_up_to_message_id) do
+    last_id = chat_summarized_up_to_message_id || 0
+    count = Message
+            |> where(chat_id: ^chat_id)
+            |> where([m], m.id > ^last_id)
+            |> Repo.aggregate(:count, :id)
+  end
+
+  def get_messages_for_summary(chat_id, chat_summarized_up_to_message_id, chat_summary) do
+    last_id = chat_summarized_up_to_message_id || 0
+    last_messages = Message
+                    |> where(chat_id: ^chat_id)
+                    |> where([m], m.id > ^last_id)
+                    |> where([m], m.role in ["user", "assistant"])
+                    |> order_by([asc: :id])
+                    |> Repo.all()
+
+    context = Enum.map(last_messages, fn msg -> %{role: msg.role, content: msg.content} end)
+
+    summary =
+      case chat_summary do
+        nil -> nil
+        "" -> nil
+        summary -> summary
+      end
+
+
+    context =
+      case context do
+        nil -> nil
+        "" -> nil
+        context -> context
+      end
+
+    last_msg_id =
+      case List.last(last_messages) do
+        nil -> nil
+        msg -> msg.id
+      end
+
+    {:ok, %{summary: summary, context: context, last_msg_id: last_msg_id}}
+  end
+
 
   @doc"""
   Функция Инициализирующая первое создание чата, запись в БД как Чата так и первое его сообщение с пометкой 'system'
@@ -216,7 +275,7 @@ defmodule Messenger.Chats do
     end)
 
      # 3: Собственно сообщение от пользователя
-    |> Multi.insert(:content, fn %{chat: chat} ->
+    |> Multi.insert(:message, fn %{chat: chat} ->
       Message.changeset(%Message{}, %{
         "chat_id" => chat.id,
         "content" => content,

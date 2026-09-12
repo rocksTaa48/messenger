@@ -25,9 +25,9 @@ defmodule Messenger.Serializer do
     %{
       "id" => to_string(ai_profile.id),
       "name" => ai_profile.name,
-      "provider" => ai_profile.provider || "Без названия",
-      "model" => ai_profile.model,
-      "openrouter_model_id" => ai_profile.openrouter_model_id || "Без модели",
+      "provider" => ai_profile.ai_model.provider || "Без названия",
+      "model" => ai_profile.ai_model.model_name,
+      "openrouter_model_id" => ai_profile.ai_model.openrouter_model_id || "Без модели",
       "display_name" => ai_profile.display_name || "Без имени",
       "display_description" => ai_profile.display_description || "Без описания",
 

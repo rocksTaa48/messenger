@@ -97,7 +97,7 @@ defmodule Messenger.Chats.ChatsAgent do
     api_key = Application.get_env(:messenger, :ai_providers)[:openrouter_api_key]
 
     body = %{
-             model: ai_profile.openrouter_model_id,
+             model: ai_profile.ai_model.openrouter_model_id,
              messages: context,
              temperature: ai_profile.temperature,
              top_p: ai_profile.top_p,

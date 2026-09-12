@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount, onDestroy, tick, beforeUpdate, afterUpdate } from 'svelte';
+    import { onMount, tick, beforeUpdate, afterUpdate } from 'svelte';
     import { ChevronLeft, Paperclip, Mic, SendHorizontal, Settings, FileImage } from 'lucide-svelte';
     import { appState } from '../../stores/socketStore';
     import Message from "./partials/Message.svelte"
@@ -34,13 +34,11 @@
     let isPaginationEnabled = false;
     let observer: IntersectionObserver | null = null;
 
-    // 🚀 НОВЫЕ ФЛАГИ ДЛЯ ИДЕАЛЬНОГО СКРОЛЛА
-    let hasInitialScrollDone = false; // Гарантирует скролл вниз ровно один раз при загрузке
-    let isNearBottom = true;          // Отслеживает, читает ли пользователь историю
+    let hasInitialScrollDone = false;
+    let isNearBottom = true;
 
     let scrollState: {
         oldScrollHeight: number;
-        oldScrollTop: number;
         expectedFirstId: string | number | null;
     } | null = null;
 
@@ -68,11 +66,11 @@
         scrollToBottomImmediate();
     }
 
-    // 🚀 Отслеживаем позицию скролла (вернули это, это критически важно!)
     function handleScroll() {
         if (!scrollContainer) return;
-        const distanceFromBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
-        isNearBottom = distanceFromBottom < 150; // Если до низа меньше 150px, считаем что мы "внизу"
+        const distanceFromBottom =
+            scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
+        isNearBottom = distanceFromBottom < 150;
     }
 
     // === Intersection Observer ===
@@ -92,7 +90,7 @@
             },
             {
                 root: scrollContainer,
-                rootMargin: '200px 0px 0px 0px',
+                rootMargin: '720px 0px 0px 0px',
                 threshold: 0
             }
         );
@@ -101,18 +99,19 @@
     }
 
     // === Подгрузка старых сообщений ===
-    async function loadMoreMessages() {
+    function loadMoreMessages() {
         if (!scrollContainer || !activeChat?.has_more_messages || !isPaginationEnabled) return;
+        if (isLoadingMoreMessages) return;
 
         isLoadingMoreMessages = true;
 
+        // Снимок ТОЛЬКО высоты и первого id. oldScrollTop не нужен —
+        // восстановление делается инкрементально от текущего значения.
         scrollState = {
             oldScrollHeight: scrollContainer.scrollHeight,
-            oldScrollTop: scrollContainer.scrollTop,
             expectedFirstId: messages[0]?.id ?? null
         };
 
-        // Защита от зависания
         const timeoutId = setTimeout(() => {
             if (isLoadingMoreMessages) {
                 isLoadingMoreMessages = false;
@@ -120,19 +119,9 @@
             }
         }, 10000);
 
-        appState.send('chat:load_more_messages', { chat_id: activeChat.id })
-            .receive('ok', async () => {
+        appState.send('chat:load_more_messages', { chat_id: String(activeChat.id) })
+            .receive('ok', () => {
                 clearTimeout(timeoutId);
-                // Ждем отрисовки
-                await tick();
-                if (scrollContainer && scrollState) {
-                    const heightDiff = scrollContainer.scrollHeight - scrollState.oldScrollHeight;
-                    if (heightDiff > 0) {
-                        scrollContainer.scrollTop = scrollState.oldScrollTop + heightDiff;
-                    }
-                }
-                scrollState = null;
-                isLoadingMoreMessages = false;
             })
             .receive('error', () => {
                 clearTimeout(timeoutId);
@@ -155,41 +144,40 @@
         prevLastId = messages[messages.length - 1]?.id ?? null;
     });
 
-    // === afterUpdate: МОЗГ СКРОЛЛА ===
-    afterUpdate(async () => {
+    // === afterUpdate: синхронно, одна точка восстановления ===
+    afterUpdate(() => {
         if (!scrollContainer) return;
 
-        // 1. 🚀 ПЕРВИЧНЫЙ СКРОЛЛ ВНИЗ (Решает твою главную проблему!)
-        // Если мы еще не скроллили при старте, и сообщения уже пришли -> скроллим вниз
+        // 1. Первичный скролл вниз при открытии чата
         if (!hasInitialScrollDone && messages.length > 0) {
-            await tick(); // Гарантируем, что DOM полностью отрисован с новыми сообщениями
             scrollToBottomImmediate();
             hasInitialScrollDone = true;
-            isPaginationEnabled = true; // Включаем пагинацию только после того, как оказались внизу
+            isPaginationEnabled = true;
             return;
         }
 
-        // 2. Восстановление позиции при подгрузке старых сообщений
-        if (isLoadingMoreMessages && scrollState && scrollContainer) {
+        // 2. Восстановление позиции после подгрузки.
+        //    Синхронно, инкрементально от ТЕКУЩЕГО scrollTop.
+        if (isLoadingMoreMessages && scrollState) {
             const currentFirstId = messages[0]?.id ?? null;
             if (currentFirstId !== scrollState.expectedFirstId) {
                 const heightDiff = scrollContainer.scrollHeight - scrollState.oldScrollHeight;
                 if (heightDiff > 0) {
-                    scrollContainer.scrollTop = scrollState.oldScrollTop + heightDiff;
+                    scrollContainer.scrollTop += heightDiff;
                 }
                 scrollState = null;
                 isLoadingMoreMessages = false;
             }
-            return; // Блокируем остальной код во время подгрузки
+            return;
         }
 
-        // 3. Автоскролл вниз при стриминге токенов (ТОЛЬКО если пользователь и так внизу)
+        // 3. Автоскролл вниз при стриминге токенов
         if (isGenerating && isNearBottom) {
             scrollToBottomImmediate();
             return;
         }
 
-        // 4. Автоскролл вниз при новых сообщениях (ТОЛЬКО если пользователь и так внизу)
+        // 4. Автоскролл вниз при новых сообщениях
         if (
             !isLoadingMoreMessages &&
             messages.length > prevMessagesCount &&
@@ -214,7 +202,6 @@
         newMessageText = "";
         if (textareaElement) textareaElement.style.height = 'auto';
 
-        // При ручной отправке мы ВСЕГДА хотим быть внизу
         isNearBottom = true;
         scrollToBottom();
     }
@@ -277,18 +264,20 @@
     <!-- ЗОНА СООБЩЕНИЙ -->
     <div
             bind:this={scrollContainer}
-            on:scroll={handleScroll} class="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-2 scrollbar-none"
+            on:scroll={handleScroll}
+            class="flex-1 py-4 px-3 flex flex-col gap-2 scrollbar-none {isLoadingMoreMessages ? 'overflow-y-hidden' : 'overflow-y-auto'}"
+            style="overflow-anchor: none; overscroll-behavior-y: contain;"
     >
-    <div bind:this={topSentinel} class="h-2 w-full flex-shrink-0">
-        {#if isLoadingMoreMessages && activeChat?.has_more_messages}
-            <div class="flex justify-center py-3">
-                <span class="text-gray-500 text-xs animate-pulse">Загрузка истории...</span>
-            </div>
-        {/if}
-    </div>
+        <div bind:this={topSentinel} class="h-2 w-full flex-shrink-0">
+            {#if isLoadingMoreMessages && activeChat?.has_more_messages}
+                <div class="flex justify-center py-3">
+                    <span class="text-gray-500 text-xs animate-pulse">Загрузка истории...</span>
+                </div>
+            {/if}
+        </div>
 
-    <Message {messages} {formatTime} />
-</div>
+        <Message {messages} {formatTime} />
+    </div>
 
     <!-- НИЖНЯЯ ПАНЕЛЬ ВВОДА -->
     <footer class="w-full p-2 bg-white/[0.02] backdrop-blur-xl border-t border-white/5 flex items-center gap-2 flex-shrink-0 pb-safe relative">
