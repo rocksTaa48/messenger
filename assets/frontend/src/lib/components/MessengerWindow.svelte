@@ -3,6 +3,28 @@
     import { ChevronLeft, Paperclip, Mic, SendHorizontal, Settings, FileImage } from 'lucide-svelte';
     import { appState } from '../../stores/socketStore';
     import Message from "./partials/Message.svelte"
+    import ChatSettingsModal from './ChatSettingsModal.svelte';
+
+    // Состояние для открытия шторки
+    let isChatSettingsOpen = false;
+
+    // Текущий AiProfile (фоллбэк на дефолтный, например 'balanced' или '1')
+    $: currentAiProfileId = $appState.active_chat?.ai_profile_id || 'balanced';
+
+    // Обработчик выбора AiProfile
+    function handleAiProfileSelect(event: CustomEvent<{ aiProfileId: string }>) {
+        const newAiProfileId = event.detail.aiProfileId;
+        console.log('Выбран новый AiProfile:', newAiProfileId);
+
+        // Отправляем на бэк смену AiProfile для текущего чата
+        appState.send("chat:change_ai_profile", {
+            chat_id: $appState.active_chat?.id,
+            ai_profile_id: newAiProfileId
+        });
+
+        // Закрываем модалку после выбора
+        isChatSettingsOpen = false;
+    }
 
     // === Реактивные данные из стора ===
     $: activeChat = $appState.active_chat;
@@ -256,7 +278,13 @@
             </span>
         </div>
 
-        <div class="p-2 bg-white/5 rounded-xl text-gray-400 hover:text-white transition-colors flex items-center justify-center flex-shrink-0">
+        <div
+            on:click={() => {
+               isChatSettingsOpen = true;
+               if (WebApp.HapticFeedback) WebApp.HapticFeedback.impactOccurred('light');
+            }}
+            class="p-2 bg-white/5 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center flex-shrink-0 active:scale-95 cursor-pointer"
+        >
             <Settings size={24} strokeWidth={2.5} />
         </div>
     </header>
@@ -329,6 +357,13 @@
         {/if}
     </footer>
 
+    <!-- Шторка выбора AiProfile -->
+    <ChatSettingsModal
+            bind:isOpen={isChatSettingsOpen}
+            currentAiProfileId={currentAiProfileId}
+            currentTier={$appState.user?.status || 'free'}
+            on:apply={handleAiProfileSelect}
+    />
 </div>
 
 <style>

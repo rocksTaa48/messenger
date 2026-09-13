@@ -5,7 +5,13 @@ defmodule Messenger.AiProfiles do
   alias Messenger.AiProfiles.Prompt
   alias Messenger.AiProfiles.AiModel
 
-
+  # Подгружаем спсок всех профилей доступных для пользователей
+  def available_user_profiles() do
+    AiProfile
+    |> where(is_active: true, is_public: true)
+    |> preload([:ai_model])
+    |> Repo.all()
+  end
 
   # Подгружаем спсок профилей доступных для пользователя по его "status"
   def available_user_profiles(user_status) do

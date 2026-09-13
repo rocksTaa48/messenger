@@ -21,6 +21,15 @@ export interface AppState {
 
     // Данные от бэкенда
     user: { id: number; username: string; role: string; status: string; } | null;
+    ai_model: { id: string; model_name: string; provider: string; };
+    ai_profile: {
+        id: string;
+        name: string;
+        tier: string;
+        display_name: string;
+        display_description: string;
+        model: AppState['ai_model'];
+    };
     chats_list: Array<{
         id: string;
         title: string;
@@ -32,14 +41,13 @@ export interface AppState {
     ai_profiles: Array<{
         id: string;
         name: string;
-        provider: string;
-        model: string;
-        openrouter_model_id: string;
+        tier: string;
         display_name: string;
         display_description: string;
+        model: AppState['ai_model'];
     }>;
     groups: Array<{ id: string; title: string }>;
-    active_chat: { id: string; title: string;
+    active_chat: { id: string; title: string; ai_profile: AppState['ai_profile'];
         messages: Array<{
             id: number;
             content: string;
@@ -59,6 +67,8 @@ const initialValue: AppState = {
     nav_context: { screen: 'chats' }, // Стартуем всегда с лобби чатов
     nav_history: [],
     user: null,
+    ai_profiles: [],
+    ai_model: null,
     chats_list: [],
     groups: [],
     active_chat: null,

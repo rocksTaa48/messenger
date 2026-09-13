@@ -42,8 +42,5 @@ defmodule Messenger.Repo.Migrations.CreateAiModels do
 
     create index(:ai_profiles, [:ai_model_id])
     create index(:ai_profiles, [:purpose, :is_active])
-    # Нельзя сделать два профиля для "naming_chats" на базе "gpt-4o-mini" что бы не засирать бд хламом
-    create unique_index(:ai_profiles, [:ai_model_id, :purpose])
-
   end
 end

@@ -4,6 +4,7 @@
     import Chat from "./partials/Chat.svelte";
     import ChatContextMenu from './ChatContextMenu.svelte';
     import ChatsFoldersModal from './ChatsFoldersModal.svelte';
+    import ConfirmModal from './ConfirmModal.svelte'
     import { createEventDispatcher } from 'svelte';
     import { appState } from '../../stores/socketStore';
     import { longPress } from '../actions/longPress';
@@ -173,16 +174,17 @@
                 icon: Trash2,
                 isDanger: true,
                 onClick: () => {
-                    if (confirm('Вы уверены, что хотите удалить этот чат? Это действие нельзя отменить.')) {
-                        // Пока тут реализована система с отдачей от бэка стейта, мне пока так спокойнее
-                        // на бэк я отдаю group_id или если это all то ничего, соответственно отдадуться все чаты
+                    isContextMenuOpen = false;
+                    pendingDeleteAction = () => {
                         const payload = activeCategoryId !== 'All'
                             ? { chat_id: chat.id, group_id: activeCategoryId, action: "delete" }
                             : { chat_id: chat.id, action: "delete"};
-
-                        console.log('Delete chat:', chat.id);
-                        appState.send("chat:click_update_chat", payload)
-                    }
+                        appState.send("chat:click_update_chat", payload);
+                    };
+                    deleteModalTitle = 'Удалить чат?';
+                    deleteModalMessage = 'Вы уверены, что хотите удалить этот чат? Это действие нельзя отменить.';
+                    deleteModalConfirmText = 'Удалить';
+                    isDeleteModalOpen = true;
                 }
             }
         ];
@@ -237,20 +239,16 @@
                 label: 'Удалить папку',
                 icon: Trash2,
                 isDanger: true,
+
                 onClick: () => {
-                    if (confirm(`Удалить папку "${group.title}"? Чаты не удалятся, а вернутся в "All".`)) {
-                        const isCurrentGroup = activeCategoryId.toString() === group.id.toString();
-
-                        // Отправляем запрос на удаление
+                    isContextMenuOpen = false;
+                    pendingDeleteAction = () => {
                         appState.send("chat:click_remove_group", { group_id: group.id, action: "remove" });
-
-                        // Если удаляем current группу, оптимистично переключаемся в 'All'
-                        if (isCurrentGroup) {
-                            appState.goTo({ screen: 'chats' });
-                        }
-
-                        isGroupContextMenuOpen = false;
-                    }
+                    };
+                    deleteModalTitle = 'Удалить папку?';
+                    deleteModalMessage = 'Вы уверены, что хотите удалить папку? Чаты не удалятся!';
+                    deleteModalConfirmText = 'Удалить';
+                    isDeleteModalOpen = true;
                 }
             }
         ];
@@ -287,7 +285,7 @@
         }, 50);
     }
 
-    // Переименование
+    // Переименование модалка
 
     let isRenameModalOpen = false;
     let renameItemId: string | null = null;
@@ -298,6 +296,13 @@
     let renameEventKey: string;
     let renameExtraParams: Record<string, any> = {};
 
+    // Подтверждение модалка
+    let isDeleteModalOpen = false;
+    let deleteModalTitle = "";
+    let deleteModalMessage = "";
+    let deleteModalConfirmText = "Удалить";
+    let pendingDeleteAction: (() => void) | null = null;
+
 </script>
 
 <div class="flex flex-col h-full w-full bg-[#0f0f0f] rounded-[24px] p-2 text-white font-sans border border-white/5 shadow-2xl overflow-hidden">
@@ -306,12 +311,10 @@
     <div class="px-2 pt-2 select-none">
         <!-- ВЕРХНЯЯ ПАНЕЛЬ: ЗАГОЛОВОК / ПОИСК -->
         <div class="flex items-center justify-between mb-2 h-10">
-
             {#if !isSearchOpen}
                 <button
                         on:click={() => isModalOpen = true}
-                        class="w-10 h-10 text-gray-400 hover:text-[#2481cc]
-                 transition-colors border-b-2 border-transparent pb-1 transition-transform active:scale-95"
+                        class="w-10 h-10 text-gray-400 hover:text-[#2481cc] transition-colors border-b-2 border-transparent pb-1 transition-transform active:scale-95"
                 >
                     <Plus size={22} />
                 </button>
@@ -325,9 +328,9 @@
                 </p>
             {:else}
                 <div class="flex-1 relative mx-2 transition-all duration-300">
-                <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400 dark:text-gray-500">
-                    <Search size={16} />
-                </span>
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400 dark:text-gray-500">
+                        <Search size={16} />
+                    </span>
                     <input
                             type="text"
                             bind:value={searchQuery}
@@ -365,53 +368,50 @@
                 {/if}
             </button>
         </div>
+    </div>
 
-        <!-- ЛЕНТА ПАПОК ЧАТОВ -->
-        <div class="flex items-center w-full gap-3 px-4 mb-2 border-b border-gray-100 dark:border-[#101921]">
-            <div class="flex items-center gap-6 overflow-x-auto whitespace-nowrap scrollbar-none flex-1 h-10 touch-pan-x">
-                <!-- КНОПКА ALL (системная, без long press) -->
-                <button
-                        class="h-full px-1 text-xs font-semibold tracking-wide transition-all relative flex items-center justify-center pb-1 border-b-2
+    <!-- ПРОКРУЧИВАЕМЫЙ КОНТЕЙНЕР С ЧАТАМИ -->
+    <div class="flex-1 overflow-y-auto pb-24 scrollbar-none space-y-2 px-2 w-full relative">
+
+        <!-- ЛЕНТА ПАПОК -->
+        <div class="sticky top-0 z-10 -mx-2 px-1 py-1 mb-2">
+            <div class="rounded-[32px] overflow-hidden border border-white/5 bg-[#121212]/10 backdrop-blur-2xl">
+                <div class="flex items-center gap-2 overflow-x-auto whitespace-nowrap scrollbar-none px-3 py-2 touch-pan-x">
+                    <!-- КНОПКА ALL -->
+                    <button
+                            class="h-8 px-4 rounded-full text-[13px] font-medium transition-all duration-200 flex items-center justify-center select-none active:scale-95 shrink-0
                         {activeCategoryId === 'All'
-                            ? 'border-[#2481cc] text-[#2481cc] dark:text-[#52a6e7]'
-                            : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}"
-                        on:click={() => appState.goTo({ screen: 'chats' })}
-                >
-                    All
-                    {#if activeCategoryId === 'All'}
-                        <div class="absolute bottom-0 inset-x-0 h-[2px] bg-[#2481cc] blur-[2px] opacity-50"></div>
-                    {/if}
-                </button>
+                            ? 'bg-white/10 text-white backdrop-blur-2xl'
+                            : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}"
+                            on:click={() => appState.goTo({ screen: 'chats' })}
+                    >
+                        All
+                    </button>
 
-                <!-- ДИНАМИЧЕСКИЕ ГРУППЫ прикручен long press -->
-                {#if $appState && $appState.groups}
-                    {#each $appState.groups as group (group.id)}
-                        {@const isActive = activeCategoryId.toString() === group.id.toString()}
+                    <!-- ДИНАМИЧЕСКИЕ ГРУППЫ -->
+                    {#if $appState && $appState.groups}
+                        {#each $appState.groups as group (group.id)}
+                            {@const isActive = activeCategoryId.toString() === group.id.toString()}
 
-                        <button data-group-id={group.id}
-                                use:longPress={{ duration: 500, callback: (e) => handleGroupLongPress(e, group) }}
-                                use:scrollActiveIntoView={isActive}
-                                on:click={() => handleGroupClick(group)}
-                                class="h-full px-1 text-xs font-semibold tracking-wide transition-all relative flex items-center justify-center pb-1 border-b-2 select-none touch-pa
+                            <button
+                                    data-group-id={group.id}
+                                    use:longPress={{ duration: 500, callback: (e) => handleGroupLongPress(e, group) }}
+                                    use:scrollActiveIntoView={isActive}
+                                    on:click={() => handleGroupClick(group)}
+                                    class="h-8 px-4 rounded-full text-[13px] font-medium transition-all duration-200 flex items-center justify-center select-none active:scale-95 shrink-0
                                 {isActive
-                                ? 'border-[#2481cc] text-[#2481cc] dark:text-[#52a6e7]'
-                                : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}"
-                        >
-                            {group.title}
-
-                            {#if isActive}
-                                <div class="absolute bottom-[0px] inset-x-0 h-[2px] bg-[#2481cc] blur-[2px] opacity-50"></div>
-                            {/if}
-                        </button>
-                    {/each}
-                {/if}
-
+                                    ? 'bg-white/10 text-white backdrop-blur-2xl'
+                                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}"
+                            >
+                                {group.title}
+                            </button>
+                        {/each}
+                    {/if}
+                </div>
             </div>
         </div>
 
-    </div>
-
-    <div class="flex-1 overflow-y-auto pb-24 scrollbar-none space-y-2 px-2 w-full">
+        <!-- СПИСОК ЧАТОВ -->
         {#if $appState && $appState.chats_list}
             {#each $appState.chats_list as chat (chat.id)}
                 <Chat {chat} on:chatLongPress={handleChatLongPress} />
@@ -443,28 +443,11 @@
         {/if}
     </div>
 
-    <!-- Модалка добавления группы/папки -->
+    <!-- Все твои модалки остаются здесь без изменений -->
     <AddCategoryModal bind:isOpen={isModalOpen} on:add={handleAddCategory} />
-
-    <!-- Модалка контекстного меню для конкретного чата -->
-    <ChatContextMenu
-            bind:isOpen={isContextMenuOpen}
-            chatTitle={contextMenuChatTitle}
-            actions={contextMenuActions}
-    />
-    <!-- Модалка контекстного меню для конкретного чата, с выбором перемещения в папку -->
-    <ChatsFoldersModal
-            bind:isOpen={isFoldersModalOpen}
-            chatId={folderModalChatId}
-            chatTitle={folderModalChatTitle}
-    />
-    <!-- Модалка контекстного меню для конкретной папки чатов -->
-    <ChatContextMenu
-            bind:isOpen={isGroupContextMenuOpen}
-            chatTitle={groupContextMenuTitle}
-            actions={groupContextMenuActions}
-    />
-    <!-- Модалка контекстного меню для переименования -->
+    <ChatContextMenu bind:isOpen={isContextMenuOpen} chatTitle={contextMenuChatTitle} actions={contextMenuActions} />
+    <ChatsFoldersModal bind:isOpen={isFoldersModalOpen} chatId={folderModalChatId} chatTitle={folderModalChatTitle} />
+    <ChatContextMenu bind:isOpen={isGroupContextMenuOpen} chatTitle={groupContextMenuTitle} actions={groupContextMenuActions} />
     <RenameModal
             bind:isOpen={isRenameModalOpen}
             itemId={renameItemId}
@@ -472,10 +455,22 @@
             modalTitle={renameModalTitle}
             eventType={renameEventType}
             eventCode={renameEventCode}
-            itemKey= {renameEventKey}
+            itemKey={renameEventKey}
             extraParams={renameExtraParams}
     />
-
+    <ConfirmModal
+            bind:isOpen={isDeleteModalOpen}
+            title={deleteModalTitle}
+            message={deleteModalMessage}
+            confirmText={deleteModalConfirmText}
+            isDanger={true}
+            on:confirm={() => {
+                if (pendingDeleteAction) {
+                    pendingDeleteAction();
+                    pendingDeleteAction = null;
+                }
+            }}
+    />
 </div>
 
 <style>
@@ -489,4 +484,7 @@
         -ms-overflow-style: none;
         scrollbar-width: none;
     }
+     button {
+         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+     }
 </style>

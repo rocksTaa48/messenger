@@ -67,7 +67,9 @@
 
             <!-- Заголовок шторки -->
             <div class="flex justify-between items-center mb-6">
-                <h3 class="text-xl font-bold text-white">New Category</h3>
+                <h3 class="text-xl font-bold text-white">
+                    Новая папка
+                </h3>
                 <button on:click={() => { close(); triggerHaptic(); }} class="p-2 bg-white/5 rounded-full text-gray-400 hover:text-white transition-colors">
                     <X size={20} />
                 </button>
@@ -76,9 +78,6 @@
             <!-- Контент: Форма ввода -->
             <div class="space-y-5">
                 <div class="flex flex-col gap-1.5">
-                    <label for="category-input" class="text-xs font-bold uppercase tracking-wider text-gray-400 pl-1">
-                        Folder Name
-                    </label>
                     <!-- focusAfterFly -->
                     <input
                             id="category-input"
@@ -98,7 +97,7 @@
                         class="w-full bg-[#2481cc] disabled:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-4 rounded-full flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-[#2481cc]/20"
                 >
                     <PlusCircle size={18} />
-                    CREATE FOLDER
+                    Создать
                 </button>
             </div>
 

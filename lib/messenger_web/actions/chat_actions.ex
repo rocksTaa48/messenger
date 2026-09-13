@@ -20,6 +20,7 @@ defmodule MessengerWeb.Actions.ChatActions do
       |> Map.put("active_chat", %{
         "id" => chat_id,
         "group_id" => chat.group_id,
+        "ai_profile_id" => chat.ai_profile_id,
         "messages" => serialized_messages,
         "has_more_messages" => length(serialized_messages) >= 15
       })
@@ -78,12 +79,16 @@ defmodule MessengerWeb.Actions.ChatActions do
   """
   def handle_in("click_new", _payload, socket) do
     current_user = socket.assigns.current_user
-    ai_profiles = AiProfiles.available_user_profiles(current_user.status)
-    formated_profile = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
+    ai_profiles = AiProfiles.available_user_profiles() # Получаем вообще все профили
+    user_default_ai_profile = Enum.find(ai_profiles, fn profile -> profile.is_default == true and profile.tier == current_user.status end)
+
+    formated_profiles = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
+    formatted_user_default_ai_profile = Serializer.ai_profile_serialize(user_default_ai_profile)
 
     # Дополняем дерево массивом ai_profiles
     new_state = socket.assigns.state
-                |> Map.put("ai_profiles", formated_profile)
+                |> Map.put("ai_profiles", formated_profiles)
+                |> Map.put("ai_profile", formatted_user_default_ai_profile)
 
     push(socket, "sync", new_state)
     {:reply, :ok, assign(socket, :state, new_state)}
