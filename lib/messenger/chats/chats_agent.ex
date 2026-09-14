@@ -166,7 +166,8 @@ defmodule Messenger.Chats.ChatsAgent do
               {:ai_stream_done, %{
                 chat_id: chat_id,
                 message_id: inserted_message.id,
-                content: full_content
+                content: full_content,
+                last_message: full_content |> String.slice(0, 100)
               }}
             )
 

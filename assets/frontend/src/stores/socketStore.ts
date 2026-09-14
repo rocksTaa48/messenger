@@ -178,31 +178,40 @@ export const appState = {
         });
 
         // 2. Завершение генерации
-        channel.on('ai:stream_done', (payload: { chat_id: string; message_id?: number; content?: string }) => {
+        channel.on('ai:stream_done', (payload) => {
             update(state => {
-                if (!state.active_chat) return state;
+                const targetId = String(payload.chat_id);
 
-                const currentId = state.active_chat.id;
-                // Приводим ID к строке
-                if (currentId && String(currentId) !== String(payload.chat_id)) {
-                    return state;
+                // 1. Всегда обновляем список чатов в лобби
+                const updatedChatsList = Array.isArray(state.chats_list)
+                    ? state.chats_list.map(chat =>
+                        chat && String(chat.id) === targetId
+                            ? { ...chat, last_message: payload.last_message || chat.last_message }
+                            : chat
+                    )
+                    : state.chats_list;
+
+                // 2. Обновляем active_chat только если он открыт и совпадает
+                let active_chat = state.active_chat;
+                if (active_chat && String(active_chat.id) === targetId) {
+                    const messages = (active_chat.messages || []).map(msg => {
+                        if (msg.role === 'assistant' && msg.is_streaming) {
+                            return {
+                                ...msg,
+                                id: payload.message_id || msg.id,
+                                content: payload.content || msg.content,
+                                is_streaming: false
+                            };
+                        }
+                        return msg;
+                    });
+                    active_chat = { ...active_chat, messages };
                 }
-
-                const messages = state.active_chat.messages.map(msg => {
-                    if (msg.role === 'assistant' && msg.is_streaming) {
-                        return {
-                            ...msg,
-                            id: payload.message_id || msg.id,
-                            content: payload.content || msg.content,
-                            is_streaming: false
-                        };
-                    }
-                    return msg;
-                });
 
                 return {
                     ...state,
-                    active_chat: { ...state.active_chat, id: payload.chat_id, messages }
+                    chats_list: updatedChatsList,
+                    active_chat
                 };
             });
         });

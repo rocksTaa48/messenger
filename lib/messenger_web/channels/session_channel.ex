@@ -153,6 +153,7 @@ defmodule MessengerWeb.SessionChannel do
     {:noreply, socket}
   end
 
+  # 4. Пушим событие на фронтенд обновили название чата.
   @impl true
   def handle_info({:chat_title_update, %{chat_id: chat_id, title: title}}, socket) do
     push(socket, "chat_title_update", %{
@@ -162,6 +163,7 @@ defmodule MessengerWeb.SessionChannel do
     {:noreply, socket}
   end
 
+  # 5. Пушим событие на фронтенд ошибка название чата.
   @impl true
   def handle_info({:chat_title_error, %{chat_id: chat_id, reason: reason}}, socket) do
     push(socket, "chat_title_error", %{
