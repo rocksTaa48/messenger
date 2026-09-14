@@ -5,24 +5,36 @@
     import Message from "./partials/Message.svelte"
     import ChatSettingsModal from './ChatSettingsModal.svelte';
 
-    // Состояние для открытия шторки
     let isChatSettingsOpen = false;
 
-    // Текущий AiProfile (фоллбэк на дефолтный, например 'balanced' или '1')
-    $: currentAiProfileId = $appState.active_chat?.ai_profile_id || 'balanced';
+    // Локальный выбор пользователя — живёт только пока чата нет
+    let pendingAiProfileId: string | null = null;
 
-    // Обработчик выбора AiProfile
+    //   1) чат есть → его профиль
+    //   2) юзер выбрал локально → его выбор (перебивает дефолт)
+    //   3) чата нет и юзер не выбирал → дефолт с бэка
+    $: currentAiProfileId =
+        $appState.active_chat?.ai_profile?.id ||
+        pendingAiProfileId ||
+        $appState.ai_profile?.id ||
+        null;
+
     function handleAiProfileSelect(event: CustomEvent<{ aiProfileId: string }>) {
         const newAiProfileId = event.detail.aiProfileId;
-        console.log('Выбран новый AiProfile:', newAiProfileId);
+        const chatId = $appState.active_chat?.id;
 
-        // Отправляем на бэк смену AiProfile для текущего чата
-        appState.send("chat:change_ai_profile", {
-            chat_id: $appState.active_chat?.id,
-            ai_profile_id: newAiProfileId
-        });
+        if (chatId) {
+            // Чат существует — сразу на бэк
+            appState.send("chat:click_update_chat_insight", {
+                chat_id: chatId,
+                ai_profile_id: newAiProfileId,
+                action: "update_ai_profile"
+            });
+        } else {
+            // Чата нет — запоминаем локально, на бэк НЕ шлём
+            pendingAiProfileId = newAiProfileId;
+        }
 
-        // Закрываем модалку после выбора
         isChatSettingsOpen = false;
     }
 
@@ -127,8 +139,6 @@
 
         isLoadingMoreMessages = true;
 
-        // Снимок ТОЛЬКО высоты и первого id. oldScrollTop не нужен —
-        // восстановление делается инкрементально от текущего значения.
         scrollState = {
             oldScrollHeight: scrollContainer.scrollHeight,
             expectedFirstId: messages[0]?.id ?? null
@@ -166,11 +176,10 @@
         prevLastId = messages[messages.length - 1]?.id ?? null;
     });
 
-    // === afterUpdate: синхронно, одна точка восстановления ===
+    // === afterUpdate ===
     afterUpdate(() => {
         if (!scrollContainer) return;
 
-        // 1. Первичный скролл вниз при открытии чата
         if (!hasInitialScrollDone && messages.length > 0) {
             scrollToBottomImmediate();
             hasInitialScrollDone = true;
@@ -178,8 +187,6 @@
             return;
         }
 
-        // 2. Восстановление позиции после подгрузки.
-        //    Синхронно, инкрементально от ТЕКУЩЕГО scrollTop.
         if (isLoadingMoreMessages && scrollState) {
             const currentFirstId = messages[0]?.id ?? null;
             if (currentFirstId !== scrollState.expectedFirstId) {
@@ -193,13 +200,11 @@
             return;
         }
 
-        // 3. Автоскролл вниз при стриминге токенов
         if (isGenerating && isNearBottom) {
             scrollToBottomImmediate();
             return;
         }
 
-        // 4. Автоскролл вниз при новых сообщениях
         if (
             !isLoadingMoreMessages &&
             messages.length > prevMessagesCount &&
@@ -220,10 +225,13 @@
         const text = newMessageText.trim();
         if (!text) return;
 
-        appState.sendMessage(text);
+        const chatId = $appState.active_chat?.id;
+
+        // было: appState.sendMessage(text);
+        appState.sendMessage(text, chatId ? null : pendingAiProfileId);
+
         newMessageText = "";
         if (textareaElement) textareaElement.style.height = 'auto';
-
         isNearBottom = true;
         scrollToBottom();
     }
@@ -279,11 +287,11 @@
         </div>
 
         <div
-            on:click={() => {
+                on:click={() => {
                isChatSettingsOpen = true;
                if (WebApp.HapticFeedback) WebApp.HapticFeedback.impactOccurred('light');
             }}
-            class="p-2 bg-white/5 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center flex-shrink-0 active:scale-95 cursor-pointer"
+                class="p-2 bg-white/5 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center flex-shrink-0 active:scale-95 cursor-pointer"
         >
             <Settings size={24} strokeWidth={2.5} />
         </div>

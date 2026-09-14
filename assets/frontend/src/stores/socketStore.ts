@@ -271,15 +271,15 @@ export const appState = {
     },
 
     // УЧАСТОК: Добавление сообщения в чат ------------------------------------> Оптимистичная отправка сообщения
-    sendMessage(text: string) {
+    sendMessage(text: string, aiProfileId: string | null = null) {
         if (!text.trim()) return;
 
         const tempId = `temp-${Date.now()}`;
         let currentChatId: string | null = null;
 
-        // 1. Оптимистично добавляем на фронт и ЗАПОМИНАЕМ chat_id из стейта
+        // 1. Оптимистично добавляем на фронт
         update(state => {
-            currentChatId = state.active_chat?.id || null; // <-- ИСПРАВЛЕНО: берем из стейта, а не через $appState
+            currentChatId = state.active_chat?.id || null;
 
             const activeChat = state.active_chat || {
                 id: '',
@@ -304,22 +304,22 @@ export const appState = {
             };
         });
 
-        // 2. Шлем на бэк и ЛОВИМ результат в переменную pushRequest
+        // 2. Шлём на бэк. ai_profile_id уходит ТОЛЬКО когда чата нет
         const pushRequest = this.send("chat:click_submit_message", {
             chat_id: currentChatId,
             text: text,
-            temp_id: tempId
+            temp_id: tempId,
+            ...(currentChatId ? {} : { ai_profile_id: Number(aiProfileId) })
         });
 
-        if (!pushRequest) return; // Защита, если канал умер
+        if (!pushRequest) return;
 
-        // 3. Получаем ответ и подменяем временный ID на реальный
+        // 3. OK — подменяем временный ID на реальный
         pushRequest.receive('ok', (payload: { chat_id: string; message_id: number }) => {
             update(state => {
                 if (!state.active_chat) return state;
 
                 const messages = state.active_chat.messages.map(msg =>
-                    // ИСПРАВЛЕНО: tempMsgId -> tempId
                     msg.id === tempId ? { ...msg, id: payload.message_id, is_pending: false } : msg
                 );
 
@@ -334,7 +334,7 @@ export const appState = {
             });
         });
 
-        // 4. На случай ошибки удаляем временное сообщение
+        // 4. Ошибка — удаляем временное сообщение
         pushRequest.receive('error', () => {
             update(state => {
                 if (!state.active_chat) return state;
@@ -342,7 +342,6 @@ export const appState = {
                     ...state,
                     active_chat: {
                         ...state.active_chat,
-                        // ИСПРАВЛЕНО: tempMsgId -> tempId
                         messages: state.active_chat.messages.filter(m => m.id !== tempId)
                     }
                 };

@@ -6,22 +6,24 @@
     import { appState } from '../../stores/socketStore';
 
     export let isOpen = false;
+    export let currentAiProfileId: string | null = null; // ← от родителя
+    export let currentTier: string = 'free';
 
-    const dispatch = createEventDispatcher<{ select: string }>();
+    const dispatch = createEventDispatcher<{ apply: { aiProfileId: string } }>();
 
     let selectedProfileId: string | null = null;
     let activeTab = 'free';
 
     $: profiles = $appState?.ai_profiles || [];
-    $: userStatus = $appState?.user_status || 'free';
+    $: userStatus = $appState?.user_status || currentTier;
 
-    // Fallback логика: сначала active_chat.ai_profile, потом дефолтный ai_profile
-    $: currentProfileId = $appState?.active_chat?.ai_profile?.id || $appState?.ai_profile?.id || null;
+    // Источник истины — родитель. Своих вычислений из appState тут НЕТ.
+    $: currentProfileId = currentAiProfileId || null;
 
     // Фильтрация по табу
     $: filteredProfiles = profiles.filter(profile => profile.tier === activeTab);
 
-    // Сбрасываем выбор при открытии
+    // При открытии подхватываем актуальный профиль
     $: if (isOpen) {
         selectedProfileId = currentProfileId;
         activeTab = 'free';
@@ -29,7 +31,7 @@
 
     // Проверка доступности профиля
     function isProfileAccessible(profileTier: string): boolean {
-        const tierOrder = { 'free': 0, 'premium': 1, 'ultimate': 2 };
+        const tierOrder: Record<string, number> = { 'free': 0, 'premium': 1, 'ultimate': 2 };
         const userLevel = tierOrder[userStatus] || 0;
         const profileLevel = tierOrder[profileTier] || 0;
         return userLevel >= profileLevel;
@@ -55,31 +57,29 @@
 
     function handleApply() {
         if (WebApp.HapticFeedback) WebApp.HapticFeedback.impactOccurred('medium');
-        dispatch('select', selectedProfileId);
+        if (selectedProfileId) {
+            dispatch('apply', { aiProfileId: selectedProfileId });
+        }
         close();
     }
 </script>
 
 {#if isOpen}
     <div class="fixed inset-0 z-[100] overflow-hidden pointer-events-auto">
-        <!-- Затемнение фона -->
         <div
                 class="absolute inset-0 bg-black/60 backdrop-blur-sm"
                 on:click={close}
                 transition:fade={{ duration: 150 }}
         ></div>
 
-        <!-- ТЕЛО ШТОРКИ: Зафиксируем высоту в 80% -->
         <div
                 class="absolute bottom-0 left-0 right-0 h-[80dvh] bg-[#1c1c1e] border-t border-white/10 rounded-t-[32px] shadow-2xl flex flex-col"
                 transition:fly={{ y: '100%', duration: 300 }}
         >
-            <!-- Полоска -->
             <div class="w-full flex justify-center pt-3 pb-1 flex-shrink-0">
                 <div class="w-12 h-1.5 bg-white/10 rounded-full"></div>
             </div>
 
-            <!-- Заголовок -->
             <div class="flex justify-between items-center px-6 py-3 flex-shrink-0">
                 <h3 class="text-xl font-bold text-white flex items-center gap-2">
                     <Sparkles size={20} class="text-[#2481cc]" />
@@ -93,10 +93,7 @@
                 </button>
             </div>
 
-            <!-- СПИСОК ПРОФИЛЕЙ -->
             <div class="flex-1 overflow-y-auto px-6 pb-6 space-y-3 scrollbar-none">
-
-                <!-- ТАБЫ -->
                 <div class="sticky top-0 z-10 -mx-6 px-6 py-3 mb-2">
                     <div class="rounded-[32px] overflow-hidden border border-white/5 bg-[#121212]/10 backdrop-blur-2xl">
                         <div class="flex items-center">
@@ -155,7 +152,6 @@
                                     ? 'bg-white/5 border-white/5 hover:bg-white/10'
                                     : 'bg-white/[0.02] border-white/5 opacity-60 cursor-not-allowed'}"
                         >
-                            <!-- UPGRADE PLAN -->
                             {#if !isAccessible}
                                 <div class="absolute top-0 -left-10 w-28 h-28 rotate-[-35deg] bg-gradient-to-r from-amber-500 to-orange-500 flex items-center justify-end pr-2 shadow-lg z-10">
                                     <span class="text-[9px] font-extralight text-white uppercase tracking-wider whitespace-nowrap">
@@ -189,7 +185,6 @@
                 {/if}
             </div>
 
-            <!-- Кнопка Применить (flex-shrink-0 запрещает сжатие) -->
             <div class="p-6 pt-2 border-t border-white/5 bg-[#1c1c1e] flex-shrink-0 pb-8">
                 <button
                         on:click={handleApply}

@@ -33,7 +33,7 @@
 
         <!-- Место для будущего списка чатов с AI агентами -->
         <div class="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center text-slate-500">
-          Здесь будет окно чатов с AI агентами
+          <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNGRhcGY2MG1qanN5dTZuMGZ1dzU3ZGY1ZzYzbmhxcmo3aTNubTlpcyZlcD12MV9naWZzX3JlbGF0ZWQmY3Q9Zw/UjT7T9DWRlela/giphy.gif"/>
         </div>
       </div>
     {/if}

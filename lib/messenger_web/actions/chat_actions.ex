@@ -15,20 +15,40 @@ defmodule MessengerWeb.Actions.ChatActions do
     messages = Chats.get_chat_messages(chat_id, current_user.id)
     serialized_messages = Enum.map(messages, &Serializer.message_serialize/1)
 
+    ai_profiles = AiProfiles.available_user_profiles() # Получаем вообще все профили
+    formatted_profiles = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
+
+
+    chat_ai_profile = case chat.ai_profile_id do # Получаем профиль чата
+      nil -> nil
+      "" -> nil
+      chat_profile ->
+        Enum.find(ai_profiles, fn profile -> profile.id == chat.ai_profile_id and profile.tier == current_user.status end)
+    end
+
+    user_default_ai_profile = Enum.find(ai_profiles, fn profile -> profile.is_default == true and profile.tier == current_user.status end)
+
+    current_profile = chat_ai_profile || user_default_ai_profile
+
+    formatted_current_ai_profile = Serializer.ai_profile_serialize(current_profile)
+
+
     new_state =
       socket.assigns.state
       |> Map.put("active_chat", %{
         "id" => chat_id,
         "group_id" => chat.group_id,
-        "ai_profile_id" => chat.ai_profile_id,
         "messages" => serialized_messages,
+        "ai_profile" => formatted_current_ai_profile,
         "has_more_messages" => length(serialized_messages) >= 15
       })
+      |> Map.put("ai_profiles", formatted_profiles)
 
     push(socket, "sync", new_state)
     {:reply, :ok, assign(socket, :state, new_state)}
   end
 
+  # ==============================ЛЕНИВАЯ ПОДГРУЗКА СТАРЫХ СООБЩЕНИЙ==================================
   def handle_in("load_more_messages", payload, socket) do
     IO.inspect(payload, label: "CHAT ACTIONS LOAD MORE")
 
@@ -82,12 +102,12 @@ defmodule MessengerWeb.Actions.ChatActions do
     ai_profiles = AiProfiles.available_user_profiles() # Получаем вообще все профили
     user_default_ai_profile = Enum.find(ai_profiles, fn profile -> profile.is_default == true and profile.tier == current_user.status end)
 
-    formated_profiles = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
+    formatted_profiles = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
     formatted_user_default_ai_profile = Serializer.ai_profile_serialize(user_default_ai_profile)
 
     # Дополняем дерево массивом ai_profiles
     new_state = socket.assigns.state
-                |> Map.put("ai_profiles", formated_profiles)
+                |> Map.put("ai_profiles", formatted_profiles)
                 |> Map.put("ai_profile", formatted_user_default_ai_profile)
 
     push(socket, "sync", new_state)
@@ -102,6 +122,8 @@ defmodule MessengerWeb.Actions.ChatActions do
     chat_id = Map.get(payload, "chat_id")
     content = Map.get(payload, "text")
     ai_profile_id = Map.get(payload, "ai_profile_id")
+
+    IO.inspect({chat_id, ai_profile_id}, label: "=== chat_id / ai_profile_id ===")
 
     # Проверяем есть ли чат? Тоесть будет выполнено добавление сообщения в текущий чат или создание нового
     chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
@@ -225,7 +247,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   end
 
   @doc"""
-  UPDATE_CHAT:                Мультифункция обновляет чат
+  UPDATE_CHAT:                Мультифункция обновляет чат сраружи
   """
   def handle_in("click_update_chat", payload, socket) do
 
@@ -233,6 +255,7 @@ defmodule MessengerWeb.Actions.ChatActions do
     action = Map.get(payload, "action")
     group_id_raw = Map.get(payload, "group_id")
     chat_id = Map.get(payload, "chat_id")
+    ai_profile_id = Map.get(payload, "ai_profile_id")
     title = Map.get(payload, "title")
     chat = Chats.get_chat(current_user.id, chat_id)
 
@@ -244,15 +267,18 @@ defmodule MessengerWeb.Actions.ChatActions do
 
     group_id = if group_id_raw == "All", do: nil, else: group_id_raw
 
-
     # Перебираем экшены для апдейта
     # 1) обновить название чата 2) закрепить/открепить 3) удалить чат
     action_result =
       case action do
-        "update_title" -> Chats.update_chat(chat_id, current_user.id, %{"title" => title})
-        "toggle_pin"   -> Chats.update_chat_toggle(current_user.id, chat_id, group_id)
-        "delete"       -> Chats.remove_chat(chat_id, current_user.id)
-        unknown        -> {:error, "unknown_action"}
+        "update_title"      ->
+          Chats.update_chat(chat_id, current_user.id, %{"title" => title})
+        "toggle_pin"        ->
+          Chats.update_chat_toggle(current_user.id, chat_id, group_id)
+        "delete"            ->
+          Chats.remove_chat(chat_id, current_user.id)
+        unknown             ->
+          {:error, "unknown_action"}
       end
 
     # Единый ответ для всех экшенов
@@ -273,6 +299,56 @@ defmodule MessengerWeb.Actions.ChatActions do
       {:error, _reason} ->
         {:reply, {:error, %{reason: "failed_to_execute_action"}}, socket}
     end
+  end
+
+
+  @doc"""
+  UPDATE_CHAT:                Мультифункция обновляет чат когда юзер внутри
+  """
+  def handle_in("click_update_chat_insight", payload, socket) do
+    current_user = socket.assigns.current_user
+    action = Map.get(payload, "action")
+    chat_id = Map.get(payload, "chat_id")
+    ai_profile_id = Map.get(payload, "ai_profile_id")
+
+    action_result =
+      case action do
+        "update_ai_profile" ->
+          Chats.update_chat(chat_id, current_user.id, %{"ai_profile_id" => ai_profile_id})
+        unknown             ->
+          {:error, "unknown_action"}
+      end
+
+    ai_profiles = AiProfiles.available_user_profiles() # Получаем вообще все
+    chat = Chats.get_chat(current_user.id, chat_id)
+
+    messages = Chats.get_chat_messages(chat_id, current_user.id)
+    serialized_messages = Enum.map(messages, &Serializer.message_serialize/1)
+
+    chat_ai_profile = case chat.ai_profile_id do # Получаем профиль чата
+      nil -> nil
+      "" -> nil
+      chat_profile ->
+        Enum.find(ai_profiles, fn profile -> profile.id == chat.ai_profile_id and profile.tier == current_user.status end)
+    end
+
+    formatted_profiles = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
+    formatted_current_ai_profile = Serializer.ai_profile_serialize(chat_ai_profile)
+
+    new_state =
+      socket.assigns.state
+      |> Map.put("active_chat", %{
+        "id" => chat_id,
+        "group_id" => chat.group_id,
+        "title" => chat.title,
+        "messages" => serialized_messages,
+        "ai_profile" => formatted_current_ai_profile,
+        "has_more_messages" => length(serialized_messages) >= 15
+      })
+      |> Map.put("ai_profiles", formatted_profiles)
+
+    push(socket, "sync", new_state)
+    {:reply, :ok, assign(socket, :state, new_state)}
   end
 
 
