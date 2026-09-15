@@ -42,6 +42,17 @@
     $: activeChat = $appState.active_chat;
     $: messages = activeChat?.messages || [];
     $: isGenerating = messages.some(msg => msg.is_streaming === true) || false;
+    $: lastStreamingAssistant = [...messages].reverse().find(
+        m => m.role === 'assistant' && m.is_streaming === true
+    );
+
+    $: isThink = !!lastStreamingAssistant
+        && (lastStreamingAssistant.content || '').trim().length === 0;
+
+    $: isTyping = !!lastStreamingAssistant
+        && (lastStreamingAssistant.content || '').trim().length > 0;
+
+
 
     $: currentChatInfo = $appState.chats_list.find(c =>
         c.id && activeChat?.id && String(c.id) === String(activeChat.id)
@@ -271,9 +282,18 @@
                 {/if}
             </span>
             <span class="text-[10px] font-medium transition-colors duration-300 {isGenerating ? 'text-[#2481cc]' : 'text-emerald-400/80'}">
-                {#if isGenerating}
+                {#if isTyping}
                     <span class="inline-flex items-center gap-1">
                         <span class="animate-pulse">typing</span>
+                        <span class="flex gap-0.5">
+                            <span class="w-1 h-1 bg-current rounded-full animate-bounce" style="animation-delay: 0s"></span>
+                            <span class="w-1 h-1 bg-current rounded-full animate-bounce" style="animation-delay: 0.2s"></span>
+                            <span class="w-1 h-1 bg-current rounded-full animate-bounce" style="animation-delay: 0.4s"></span>
+                        </span>
+                    </span>
+                {:else if isThink}
+                    <span class="inline-flex items-center gap-1">
+                        <span class="animate-pulse">thinking</span>
                         <span class="flex gap-0.5">
                             <span class="w-1 h-1 bg-current rounded-full animate-bounce" style="animation-delay: 0s"></span>
                             <span class="w-1 h-1 bg-current rounded-full animate-bounce" style="animation-delay: 0.2s"></span>

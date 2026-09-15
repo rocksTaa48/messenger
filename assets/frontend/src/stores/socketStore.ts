@@ -150,7 +150,6 @@ export const appState = {
                 if (!state.active_chat) return state;
 
                 const currentId = state.active_chat.id;
-                // Приводим к строке
                 if (currentId && String(currentId) !== String(payload.chat_id)) {
                     return state;
                 }
@@ -159,12 +158,12 @@ export const appState = {
                 const lastMsg = messages[messages.length - 1];
 
                 if (lastMsg && lastMsg.role === 'assistant' && lastMsg.is_streaming) {
-                    lastMsg.content += payload.token;
+                    lastMsg.content = (lastMsg.content || '') + (payload.token || '');
                 } else {
                     messages.push({
                         id: -Date.now(),
                         role: 'assistant',
-                        content: payload.token,
+                        content: payload.token || '',
                         created_at: new Date().toISOString(),
                         is_streaming: true
                     });
@@ -178,41 +177,43 @@ export const appState = {
         });
 
         // 2. Завершение генерации
-        channel.on('ai:stream_done', (payload) => {
+        channel.on('ai:stream_done', (payload: {
+            chat_id: string;
+            message_id?: number;
+            content?: string;
+            last_message?: string;
+        }) => {
             update(state => {
                 const targetId = String(payload.chat_id);
 
-                // 1. Всегда обновляем список чатов в лобби
-                const updatedChatsList = Array.isArray(state.chats_list)
-                    ? state.chats_list.map(chat =>
-                        chat && String(chat.id) === targetId
-                            ? { ...chat, last_message: payload.last_message || chat.last_message }
-                            : chat
-                    )
-                    : state.chats_list;
+                // chats_list — last_message, всегда
+                const chats_list = state.chats_list.map(chat =>
+                    chat && String(chat.id) === targetId
+                        ? { ...chat, last_message: payload.last_message ?? chat.last_message }
+                        : chat
+                );
 
-                // 2. Обновляем active_chat только если он открыт и совпадает
+                // active_chat — только если открыт наш ИЛИ id пустой (создаваемый чат)
                 let active_chat = state.active_chat;
-                if (active_chat && String(active_chat.id) === targetId) {
-                    const messages = (active_chat.messages || []).map(msg => {
-                        if (msg.role === 'assistant' && msg.is_streaming) {
-                            return {
-                                ...msg,
-                                id: payload.message_id || msg.id,
-                                content: payload.content || msg.content,
-                                is_streaming: false
-                            };
-                        }
-                        return msg;
-                    });
-                    active_chat = { ...active_chat, messages };
+                if (active_chat) {
+                    const activeId = String(active_chat.id || '');
+                    if (activeId === targetId || activeId === '') {
+                        const messages = active_chat.messages.map(msg => {
+                            if (msg.role === 'assistant' && msg.is_streaming) {
+                                return {
+                                    ...msg,
+                                    id: payload.message_id || msg.id,
+                                    content: payload.content || msg.content,
+                                    is_streaming: false
+                                };
+                            }
+                            return msg;
+                        });
+                        active_chat = { ...active_chat, id: payload.chat_id, messages };
+                    }
                 }
 
-                return {
-                    ...state,
-                    chats_list: updatedChatsList,
-                    active_chat
-                };
+                return { ...state, chats_list, active_chat };
             });
         });
 
@@ -244,27 +245,27 @@ export const appState = {
             update(state => {
                 const targetId = String(payload.chat_id);
 
-                // Обновляем в общем списке (с защитой от undefined/null)
-                const updatedChatsList = state.chats_list.map(chat =>
+                // chats_list — обновляем, если нашли чат
+                const chats_list = state.chats_list.map(chat =>
                     (chat.id && String(chat.id) === targetId)
                         ? { ...chat, title: payload.title }
                         : chat
                 );
 
-                // Обновляем и active_chat, если это он!
-                let updatedActiveChat = state.active_chat;
-                if (state.active_chat && String(state.active_chat.id) === targetId) {
-                    updatedActiveChat = {
-                        ...state.active_chat,
-                        title: payload.title // Сохраняем название прямо в активный чат
-                    };
+                // active_chat — обновляем, если он наш ИЛИ у него ещё нет id (новый чат)
+                let active_chat = state.active_chat;
+                if (active_chat) {
+                    const activeId = String(active_chat.id || '');
+                    if (activeId === targetId || activeId === '') {
+                        active_chat = {
+                            ...active_chat,
+                            id: active_chat.id || payload.chat_id,
+                            title: payload.title
+                        };
+                    }
                 }
 
-                return {
-                    ...state,
-                    chats_list: updatedChatsList,
-                    active_chat: updatedActiveChat
-                };
+                return { ...state, chats_list, active_chat };
             });
         });
 

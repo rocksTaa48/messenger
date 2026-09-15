@@ -95,10 +95,11 @@ defmodule Messenger.Chats.ChatsAgent do
   defp process_stream(user_id, chat_id, ai_profile, context) do
     url = "https://openrouter.ai/api/v1/chat/completions"
     api_key = Application.get_env(:messenger, :ai_providers)[:openrouter_api_key]
+    system_prompt = ai_profile.prompt.content
 
     body = %{
              model: ai_profile.ai_model.openrouter_model_id,
-             messages: context,
+             messages: [%{role: "system", content: system_prompt } | context],
              temperature: ai_profile.temperature,
              top_p: ai_profile.top_p,
              frequency_penalty: ai_profile.frequency_penalty,

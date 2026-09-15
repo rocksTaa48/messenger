@@ -14,35 +14,27 @@ defmodule Messenger.Chats do
 
   @doc """
   Функция get_ai_context это контекст для AI:
-  - Если 1-е сообщение имеет роль "system" -> оно всегда идет головой + N последних сообщений для 'живого' контекста
-  - Если 1-го системного сообщения нет -> отдаются последние N сообщений
   """
   def get_ai_context(chat_id) do
+
     # 1) Достаем старый саммари
     chat = Chat
               |> where(id: ^chat_id)
               |> Repo.one()
-    summary = case chat.summary do
-      nil -> nil
-      "" -> nil
-      summary -> summary
-    end
 
-    # 2) Проверяем первое сообщение в чате
-    first_message =
-      Message
-
-      |> where(chat_id: ^chat_id)
-      |> order_by(asc: :inserted_at)
-      |> limit(1)
-
-      |> Repo.one()
+    # 2) Проверяем что в саммари не шляпа
+    summary =
+      case chat.summary do
+        nil -> nil
+        "" -> nil
+        text -> if String.trim(text) == "", do: nil, else: text
+      end
 
     # 3) Вытаскиваем хвост из последних 20 сообщений диалог user и assistant
     recent_messages =
       Message
       |> where(chat_id: ^chat_id)
-      |> where([m], m.role in ["user", "assistant"]) # Исключаем system, защита от дублирования
+      |> where([m], m.role in ["user", "assistant"])
 
       |> order_by(desc: :inserted_at)
       |> limit(20)
@@ -55,31 +47,12 @@ defmodule Messenger.Chats do
       %{role: msg.role, content: msg.content}
     end)
 
-    # 4. Формируем итоговый контекст в зависимости от первого сообщения
-    case first_message do
-      %Message{role: "system"} = sys_msg ->
-        # Сценарий с промптом, обязательно ставим его в начало массива
-        if summary do
-          [%{role: "system", content: sys_msg.content <> "\n\nВот краткое резюме нашего диалога:\n\n" <> summary} | formatted_tail]
-        else
-          [%{role: "system", content: sys_msg.content} | formatted_tail]
-        end
-      _other ->
-        # Если без промпта, отдаем только последние сообщения диалога
-        formatted_tail
+    # 5) Формируем итоговый контекст в зависимости от первого сообщения
+    if summary do
+      [%{role: "assistant", content: "Краткое содержание предыдущей беседы: #{summary}"} | formatted_tail]
+    else
+      formatted_tail
     end
-  end
-
-  @doc """
-  Функция create_ai_summary это создание суммаризированного контекста для AI:
-  """
-  def create_ai_summary(chat_id) do
-  end
-
-  @doc """
-  Функция update_ai_summary это обновление суммаризированного контекста для AI:
-  """
-  def update_ai_summary(chat_id) do
   end
 
   @doc"""
@@ -254,7 +227,7 @@ defmodule Messenger.Chats do
   @doc"""
   Функция Инициализирующая первое создание чата, запись в БД как Чата так и первое его сообщение с пометкой 'system'
   """
-  def first_time_create_chat_and_message(user_id, ai_profile_id, model_name, system_prompt, content) do
+  def first_time_create_chat_and_message(user_id, ai_profile_id, model_name, content) do
     last_message = content |> String.slice(0, 100)
     Multi.new()
       # 1: Создаем чат со всеми обязательными полями
@@ -265,16 +238,7 @@ defmodule Messenger.Chats do
       "last_message" => last_message
     }))
 
-      # 2: Создаем сервисное сообщение (промпт) для модели
-    |> Multi.insert(:system_message, fn %{chat: chat} ->
-      Message.changeset(%Message{}, %{
-        "chat_id" => chat.id,
-        "content" => system_prompt,
-        "role" => "system"
-      })
-    end)
-
-     # 3: Собственно сообщение от пользователя
+     # 2: Собственно сообщение от пользователя
     |> Multi.insert(:message, fn %{chat: chat} ->
       Message.changeset(%Message{}, %{
         "chat_id" => chat.id,

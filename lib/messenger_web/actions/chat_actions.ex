@@ -193,7 +193,6 @@ defmodule MessengerWeb.Actions.ChatActions do
            user.id,
            ai_profile.id,
            ai_profile.ai_model.openrouter_model_id,
-           ai_profile.prompt.content,
            content
          ) do
       {:ok, %{chat: chat, message: message}} ->
