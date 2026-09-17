@@ -1,19 +1,19 @@
 defmodule Messenger.Chats.ChatNameCreator do
   alias Messenger.Chats
 
-  def start_generation(user_id, chat_id, ai_profile, text) do
+  def start_generation(user_id, chat_id, model, ai_profile, text) do
     Task.Supervisor.start_child(Messenger.TaskSupervisor, fn ->
-      process_generation(user_id, chat_id, ai_profile, text)
+      process_generation(user_id, chat_id, model, ai_profile, text)
     end)
   end
 
-  defp process_generation(user_id, chat_id, ai_profile, text) do
+  defp process_generation(user_id, chat_id, model, ai_profile, text) do
     url = "https://openrouter.ai/api/v1/chat/completions"
     api_key = Application.get_env(:messenger, :ai_providers)[:openrouter_api_key]
     content = ai_profile.prompt.content
 
     body = %{
-             model: ai_profile.ai_model.openrouter_model_id,
+             model: model.openrouter_model_id,
              messages: [%{role: "system", content: content},
                %{role: "user", content: text}],
              temperature: ai_profile.temperature,

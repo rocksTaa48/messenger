@@ -2,68 +2,79 @@
     import { onMount, tick, beforeUpdate, afterUpdate } from 'svelte';
     import { ChevronLeft, Paperclip, Mic, SendHorizontal, Settings, FileImage } from 'lucide-svelte';
     import { appState } from '../../stores/socketStore';
-    import Message from "./partials/Message.svelte"
+    import Message from "./partials/Message.svelte";
     import ChatSettingsModal from './ChatSettingsModal.svelte';
+    import WebApp from "@twa-dev/sdk"; // Не забудь импортировать, если используешь HapticFeedback
 
     let isChatSettingsOpen = false;
 
-    // Локальный выбор пользователя — живёт только пока чата нет
-    let pendingAiProfileId: string | null = null;
+    // Локальный выбор пользователя до создания чата
+    let pendingAiModelId: string | null = null;
+    let pendingOverrides: {
+        temperature: number;
+        topP: number;
+        frequencyPenalty: number;
+        presencePenalty: number;
+    } | null = null;
 
-    //   1) чат есть → его профиль
-    //   2) юзер выбрал локально → его выбор (перебивает дефолт)
-    //   3) чата нет и юзер не выбирал → дефолт с бэка
-    $: currentAiProfileId =
-        $appState.active_chat?.ai_profile?.id ||
-        pendingAiProfileId ||
-        $appState.ai_profile?.id ||
-        null;
+    // Реактивные значения: приоритет у pending, затем у активного чата, затем дефолт
+    $: currentAiModelId = pendingAiModelId || $appState.active_chat?.ai_model_id || $appState.ai_model?.id || null;
 
-    function handleAiProfileSelect(event: CustomEvent<{ aiProfileId: string }>) {
-        const newAiProfileId = event.detail.aiProfileId;
+    $: currentTemperature = pendingOverrides?.temperature ?? $appState.active_chat?.profile_overrides?.temperature ?? $appState.profile_overrides?.temperature ?? 0.7;
+    $: currentTopP = pendingOverrides?.topP ?? $appState.active_chat?.profile_overrides?.top_p ?? $appState.profile_overrides?.top_p ?? 1.0;
+    $: currentFrequencyPenalty = pendingOverrides?.frequencyPenalty ?? $appState.active_chat?.profile_overrides?.frequency_penalty ?? $appState.profile_overrides?.frequency_penalty ?? 0.0;
+    $: currentPresencePenalty = pendingOverrides?.presencePenalty ?? $appState.active_chat?.profile_overrides?.presence_penalty ?? $appState.profile_overrides?.presence_penalty ?? 0.0;
+
+    function handleAiModelSelect(event: CustomEvent<{
+        aiModelId: string;
+        temperature: number;
+        topP: number;
+        frequencyPenalty: number;
+        presencePenalty: number;
+    }>) {
+        const { aiModelId, temperature, topP, frequencyPenalty, presencePenalty } = event.detail;
         const chatId = $appState.active_chat?.id;
 
+        const overridesPayload = {
+            temperature,
+            top_p: topP,
+            frequency_penalty: frequencyPenalty,
+            presence_penalty: presencePenalty,
+        };
+
         if (chatId) {
-            // Чат существует — сразу на бэк
+            // Чат существует — сразу шлём на бэк
             appState.send("chat:click_update_chat_insight", {
                 chat_id: chatId,
-                ai_profile_id: newAiProfileId,
-                action: "update_ai_profile"
+                ai_model_id: aiModelId,
+                profile_overrides: overridesPayload
             });
         } else {
-            // Чата нет — запоминаем локально, на бэк НЕ шлём
-            pendingAiProfileId = newAiProfileId;
+            // Чата нет — запоминаем локально, чтобы передать при создании первого сообщения
+            pendingAiModelId = aiModelId;
+            pendingOverrides = { temperature, topP, frequencyPenalty, presencePenalty };
         }
 
         isChatSettingsOpen = false;
     }
 
     // === Реактивные данные из стора ===
-    $: activeChat = $appState.active_chat;
+    $: activeChat = $appState?.active_chat;
     $: messages = activeChat?.messages || [];
     $: isGenerating = messages.some(msg => msg.is_streaming === true) || false;
     $: lastStreamingAssistant = [...messages].reverse().find(
         m => m.role === 'assistant' && m.is_streaming === true
     );
 
-    $: isThink = !!lastStreamingAssistant
-        && (lastStreamingAssistant.content || '').trim().length === 0;
+    $: isThink = !!lastStreamingAssistant && (lastStreamingAssistant.content || '').trim().length === 0;
+    $: isTyping = !!lastStreamingAssistant && (lastStreamingAssistant.content || '').trim().length > 0;
 
-    $: isTyping = !!lastStreamingAssistant
-        && (lastStreamingAssistant.content || '').trim().length > 0;
-
-
-
-    $: currentChatInfo = $appState.chats_list.find(c =>
+    $: currentChatInfo = $appState?.chats_list.find(c =>
         c.id && activeChat?.id && String(c.id) === String(activeChat.id)
     );
 
     $: isThinking = messages.length > 0 && !activeChat?.title && !currentChatInfo?.title;
-
-    $: chatName =
-        activeChat?.title ||
-        currentChatInfo?.title ||
-        (isThinking ? "Придумываю название" : (activeChat ? "Новый чат" : "Ассистент"));
+    $: chatName = activeChat?.title || currentChatInfo?.title || (isThinking ? "Придумываю название" : (activeChat ? "Новый чат" : "Ассистент"));
 
     // === DOM-рефы ===
     let scrollContainer: HTMLDivElement;
@@ -78,32 +89,22 @@
     let isLoadingMoreMessages = false;
     let isPaginationEnabled = false;
     let observer: IntersectionObserver | null = null;
-
     let hasInitialScrollDone = false;
     let isNearBottom = true;
 
-    let scrollState: {
-        oldScrollHeight: number;
-        expectedFirstId: string | number | null;
-    } | null = null;
-
+    let scrollState: { oldScrollHeight: number; expectedFirstId: string | number | null; } | null = null;
     let prevMessagesCount = 0;
     let prevLastId: string | number | null = null;
 
     // === Хелперы ===
     function formatTime(isoString: string): string {
         if (!isoString) return "";
-        try {
-            return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        } catch (e) {
-            return "";
-        }
+        try { return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+        catch (e) { return ""; }
     }
 
     function scrollToBottomImmediate() {
-        if (scrollContainer) {
-            scrollContainer.scrollTop = scrollContainer.scrollHeight;
-        }
+        if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
     }
 
     async function scrollToBottom() {
@@ -113,137 +114,95 @@
 
     function handleScroll() {
         if (!scrollContainer) return;
-        const distanceFromBottom =
-            scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
+        const distanceFromBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
         isNearBottom = distanceFromBottom < 150;
     }
 
-    // === Intersection Observer ===
     function setupObserver() {
         if (!scrollContainer || !topSentinel || observer) return;
-
         observer = new IntersectionObserver(
             (entries) => {
-                if (
-                    entries[0].isIntersecting &&
-                    isPaginationEnabled &&
-                    !isLoadingMoreMessages &&
-                    activeChat?.has_more_messages
-                ) {
+                if (entries[0].isIntersecting && isPaginationEnabled && !isLoadingMoreMessages && activeChat?.has_more_messages) {
                     loadMoreMessages();
                 }
             },
-            {
-                root: scrollContainer,
-                rootMargin: '720px 0px 0px 0px',
-                threshold: 0
-            }
+            { root: scrollContainer, rootMargin: '720px 0px 0px 0px', threshold: 0 }
         );
-
         observer.observe(topSentinel);
     }
 
-    // === Подгрузка старых сообщений ===
     function loadMoreMessages() {
-        if (!scrollContainer || !activeChat?.has_more_messages || !isPaginationEnabled) return;
-        if (isLoadingMoreMessages) return;
-
+        if (!scrollContainer || !activeChat?.has_more_messages || !isPaginationEnabled || isLoadingMoreMessages) return;
         isLoadingMoreMessages = true;
-
-        scrollState = {
-            oldScrollHeight: scrollContainer.scrollHeight,
-            expectedFirstId: messages[0]?.id ?? null
-        };
+        scrollState = { oldScrollHeight: scrollContainer.scrollHeight, expectedFirstId: messages[0]?.id ?? null };
 
         const timeoutId = setTimeout(() => {
-            if (isLoadingMoreMessages) {
-                isLoadingMoreMessages = false;
-                scrollState = null;
-            }
+            if (isLoadingMoreMessages) { isLoadingMoreMessages = false; scrollState = null; }
         }, 10000);
 
         appState.send('chat:load_more_messages', { chat_id: String(activeChat.id) })
-            .receive('ok', () => {
-                clearTimeout(timeoutId);
-            })
-            .receive('error', () => {
-                clearTimeout(timeoutId);
-                scrollState = null;
-                isLoadingMoreMessages = false;
-            });
+            .receive('ok', () => clearTimeout(timeoutId))
+            .receive('error', () => { clearTimeout(timeoutId); scrollState = null; isLoadingMoreMessages = false; });
     }
 
-    // === Жизненный цикл ===
     onMount(() => {
         setupObserver();
-        return () => {
-            if (observer) observer.disconnect();
-        };
+        return () => { if (observer) observer.disconnect(); };
     });
 
-    // === beforeUpdate ===
     beforeUpdate(() => {
         prevMessagesCount = messages.length;
         prevLastId = messages[messages.length - 1]?.id ?? null;
     });
 
-    // === afterUpdate ===
     afterUpdate(() => {
         if (!scrollContainer) return;
-
         if (!hasInitialScrollDone && messages.length > 0) {
             scrollToBottomImmediate();
             hasInitialScrollDone = true;
             isPaginationEnabled = true;
             return;
         }
-
         if (isLoadingMoreMessages && scrollState) {
             const currentFirstId = messages[0]?.id ?? null;
             if (currentFirstId !== scrollState.expectedFirstId) {
                 const heightDiff = scrollContainer.scrollHeight - scrollState.oldScrollHeight;
-                if (heightDiff > 0) {
-                    scrollContainer.scrollTop += heightDiff;
-                }
+                if (heightDiff > 0) scrollContainer.scrollTop += heightDiff;
                 scrollState = null;
                 isLoadingMoreMessages = false;
             }
             return;
         }
-
-        if (isGenerating && isNearBottom) {
-            scrollToBottomImmediate();
-            return;
-        }
-
-        if (
-            !isLoadingMoreMessages &&
-            messages.length > prevMessagesCount &&
-            messages[messages.length - 1]?.id !== prevLastId &&
-            isNearBottom
-        ) {
+        if (isGenerating && isNearBottom) { scrollToBottomImmediate(); return; }
+        if (!isLoadingMoreMessages && messages.length > prevMessagesCount && messages[messages.length - 1]?.id !== prevLastId && isNearBottom) {
             scrollToBottomImmediate();
         }
     });
 
-    // === Закрываем меню вложений при вводе ===
-    $: if (newMessageText.trim().length > 0) {
-        isAttachmentMenuOpen = false;
-    }
+    $: if (newMessageText.trim().length > 0) { isAttachmentMenuOpen = false; }
 
-    // === Отправка сообщения ===
     function handleSend() {
         const text = newMessageText.trim();
         if (!text) return;
 
         const chatId = $appState.active_chat?.id;
 
-        // было: appState.sendMessage(text);
-        appState.sendMessage(text, chatId ? null : pendingAiProfileId);
+        // Собираем актуальные оверрайды: либо pending (если чат новый), либо текущие из стора
+        const overridesToSend = pendingOverrides || {
+            temperature: currentTemperature,
+            topP: currentTopP,
+            frequencyPenalty: currentFrequencyPenalty,
+            presencePenalty: currentPresencePenalty
+        };
+
+        // Передаем 3 аргумента: текст, модель (только если чата нет), и оверрайды
+        appState.sendMessage(text, chatId ? null : pendingAiModelId, overridesToSend);
 
         newMessageText = "";
         if (textareaElement) textareaElement.style.height = 'auto';
         isNearBottom = true;
+        pendingOverrides = null;
+        pendingAiModelId = null;
         scrollToBottom();
     }
 
@@ -254,9 +213,7 @@
         }
     }
 
-    function toggleAttachmentMenu() {
-        isAttachmentMenuOpen = !isAttachmentMenuOpen;
-    }
+    function toggleAttachmentMenu() { isAttachmentMenuOpen = !isAttachmentMenuOpen; }
 
     function autoGrow() {
         if (!textareaElement) return;
@@ -264,6 +221,8 @@
         const newHeight = Math.min(textareaElement.scrollHeight, 120);
         textareaElement.style.height = `${newHeight}px`;
     }
+
+    function handleClose() { isChatSettingsOpen = false; }
 </script>
 
 <div class="flex flex-col h-full w-full min-w-0 bg-[#0f0f0f] rounded-[24px] text-white font-sans overflow-hidden">
@@ -385,12 +344,17 @@
         {/if}
     </footer>
 
-    <!-- Шторка выбора AiProfile -->
+    <!-- Шторка выбора ChatSettings -->
     <ChatSettingsModal
             bind:isOpen={isChatSettingsOpen}
-            currentAiProfileId={currentAiProfileId}
+            currentAiModelId={currentAiModelId}
+            currentFrequencyPenalty={currentFrequencyPenalty}
+            currentPresencePenalty={currentPresencePenalty}
+            currentTopP={currentTopP}
+            currentTemperature={currentTemperature}
             currentTier={$appState.user?.status || 'free'}
-            on:apply={handleAiProfileSelect}
+            on:apply={handleAiModelSelect}
+            on:close={handleClose}
     />
 </div>
 

@@ -9,8 +9,8 @@
     // Принимаем объект чата сверху от родителя
     export let chat: any;
 
-    $: aiProfile = $appState.ai_profiles.find(p => String(p.id) === String(chat.ai_profile_id))
-
+    $: aiModel = $appState.ai_models.find(m => String(m.id) === String(chat?.ai_model_id))
+// КОРОЧЕ ВОТ ТУТ РАЗОБРАТЬСЯ С ЭТОЙ ЕБАТОЙ!
     const dispatch = createEventDispatcher();
 
     function handleLongPress(event: CustomEvent) {
@@ -28,17 +28,18 @@
       group_id: $appState.nav_context.params?.group_id || 'All'
     }
   })}
-        class="chat flex items-center gap-4 p-3.5 bg-white/[0.03] border border-white/5
+        class="chat flex items-center gap-4 py-2.5 px-3 bg-white/[0.03] border border-white/5
          rounded-[24px] hover:bg-white/[0.06] cursor-pointer transition-all active:scale-[0.99] relative"
 >
 
     <!-- Иконка чата (Аватарка) -->
-    <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 {aiProfile?.color || 'bg-slate-600'}">
-        {#if aiProfile}
-            <Icons {...{ [aiProfile.provider]: true }} size={20} />
+    <div class="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 {aiModel?.color || 'bg-slate-600'}">
+        {#if aiModel}
+            <Icons provider={aiModel.provider} size={24} />
         {:else}
             <!-- Если данные еще не пришли из сокета, покажется красивый лоадер -->
-            <div class="w-6 h-6 rounded-full bg-slate-500 animate-pulse"></div>
+            <div class="w-6 h-6 rounded-full bg-slate-500 animate-pulse">
+            </div>
         {/if}
     </div>
 

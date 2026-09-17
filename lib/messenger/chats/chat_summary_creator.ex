@@ -2,17 +2,18 @@ defmodule Messenger.Chats.ChatSummaryCreator do
   alias Messenger.Chats
 
 
-  def start_generation(user_id, chat_id, ai_profile, %{summary: summary, context: context, last_msg_id: last_msg_id}) do
+  def start_generation(user_id, chat_id, model, ai_profile, %{summary: summary, context: context, last_msg_id: last_msg_id}) do
     Task.Supervisor.start_child(Messenger.TaskSupervisor, fn ->
-      process_generation(user_id, chat_id, ai_profile, %{summary: summary, context: context, last_msg_id: last_msg_id})
+      process_generation(user_id, chat_id, model, ai_profile, %{summary: summary, context: context, last_msg_id: last_msg_id})
     end)
   end
 
-  defp process_generation(user_id, chat_id, ai_profile, %{summary: summary, context: context, last_msg_id: last_msg_id}) do
+  defp process_generation(user_id, chat_id, model, ai_profile, %{summary: summary, context: context, last_msg_id: last_msg_id}) do
     url = "https://openrouter.ai/api/v1/chat/completions"
     api_key = Application.get_env(:messenger, :ai_providers)[:openrouter_api_key]
+
     prompt_content = ai_profile.prompt.content
-    model = ai_profile.ai_model.openrouter_model_id
+    model = model.openrouter_model_id
 
     dialogue_text =
       context

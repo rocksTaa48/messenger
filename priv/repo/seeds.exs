@@ -8,74 +8,114 @@ IO.puts("🌱 Начинаем посев данных...")
 # ---------------------------------------------------------------------------------------------------------
 IO.puts("Создаем модели...")
 
+# Free tier
 model_deep_seek = Repo.insert!(%AiModel{
   provider: "DeepSeek",
-  model_name: "DeepSeek V4 Flash Latest",
+  model_name: "DeepSeek V4 Flash",
+  display_name: "DeepSeek V4 Flash",
+  display_description: "Глубокое рассуждение, написание кода и агентные задачи, за небольшие деньги",
   openrouter_model_id: "~deepseek/deepseek-v4-flash-latest",
   is_active: true,
   cost_per_1m_input: Decimal.new("0.17"),
   cost_per_1m_output: Decimal.new("0.53"),
-  cost_currency: "USD"
-})
-
-model_kimi = Repo.insert!(%AiModel{
-  provider: "MoonshotAI",
-  model_name: "MoonshotAI Kimi Latest",
-  openrouter_model_id: "~moonshotai/kimi-latest",
-  is_active: true,
-  cost_per_1m_input: Decimal.new("3.45"),
-  cost_per_1m_output: Decimal.new("17.25"),
-  cost_currency: "USD"
-})
-
-model_claude_haiku = Repo.insert!(%AiModel{
-  provider: "Anthropic",
-  model_name: "Anthropic Claude Haiku Latest",
-  openrouter_model_id: "~anthropic/claude-haiku-latest",
-  is_active: true,
-  cost_per_1m_input: Decimal.new("1.0"),
-  cost_per_1m_output: Decimal.new("5.0"),
-  cost_currency: "USD"
-})
-
-model_claude_opus = Repo.insert!(%AiModel{
-  provider: "Anthropic",
-  model_name: "Anthropic Claude Opus Latest",
-  openrouter_model_id: "~anthropic/claude-opus-latest",
-  is_active: true,
-  cost_per_1m_input: Decimal.new("5.0"),
-  cost_per_1m_output: Decimal.new("25.0"),
-  cost_currency: "USD"
-})
-
-model_gemini_flash = Repo.insert!(%AiModel{
-  provider: "Google",
-  model_name: "Google Gemini Flash Latest",
-  openrouter_model_id: "~google/gemini-flash-latest",
-  is_active: true,
-  cost_per_1m_input: Decimal.new("0.75"),
-  cost_per_1m_output: Decimal.new("3.78"),
-  cost_currency: "USD"
-})
-
-model_gemini_pro = Repo.insert!(%AiModel{
-  provider: "Google",
-  model_name: "Google Gemini Pro Latest",
-  openrouter_model_id: "~google/gemini-pro-latest",
-  is_active: true,
-  cost_per_1m_input: Decimal.new("2.0"),
-  cost_per_1m_output: Decimal.new("12.0"),
-  cost_currency: "USD"
+  cost_currency: "USD",
+  tier: "free",
+  is_default: true
 })
 
 model_qwen_3_8_flash = Repo.insert!(%AiModel{
   provider: "Qwen",
   model_name: "Qwen: Qwen3.8 Flash",
+  display_name: "Qwen 3.8 Flash",
+  display_description: "Мультимодальность, длинный контекст и высокая скорость",
   openrouter_model_id: "qwen/qwen3.8-flash",
   is_active: true,
   cost_per_1m_input: Decimal.new("0.15"),
   cost_per_1m_output: Decimal.new("0.48"),
-  cost_currency: "USD"
+  cost_currency: "USD",
+  tier: "free"
+})
+
+model_mistral_small = Repo.insert!(%AiModel{
+  provider: "Mistral",
+  model_name: "Mistral: Mistral Small 4",
+  display_name: "Mistral Small 4",
+  display_description: "Быстрый анализ, высокая пропускная способность и агентность",
+  openrouter_model_id: "mistralai/mistral-small-2603",
+  is_active: true,
+  cost_per_1m_input: Decimal.new("0.15"),
+  cost_per_1m_output: Decimal.new("0.62"),
+  cost_currency: "USD",
+  tier: "free"
+})
+
+# Premium tier
+model_kimi = Repo.insert!(%AiModel{
+  provider: "MoonshotAI",
+  model_name: "MoonshotAI Kimi",
+  display_name: "Kimi",
+  display_description: "Длинный контекст, визуальное понимание и программирование и технические задачи",
+  openrouter_model_id: "~moonshotai/kimi-latest",
+  is_active: true,
+  cost_per_1m_input: Decimal.new("3.45"),
+  cost_per_1m_output: Decimal.new("17.25"),
+  cost_currency: "USD",
+  tier: "premium"
+})
+
+model_claude_haiku = Repo.insert!(%AiModel{
+  provider: "Anthropic",
+  model_name: "Anthropic Claude Haiku",
+  display_name: "Claude Haiku",
+  display_description: "Скорость, отличное понимание и генерация идей, безопасность и следование инструкциям",
+  openrouter_model_id: "~anthropic/claude-haiku-latest",
+  is_active: true,
+  cost_per_1m_input: Decimal.new("1.0"),
+  cost_per_1m_output: Decimal.new("5.0"),
+  cost_currency: "USD",
+  tier: "premium"
+})
+
+model_gemini_flash = Repo.insert!(%AiModel{
+  provider: "Google",
+  model_name: "Google Gemini Flash",
+  display_name: "Google Gemini Flash",
+  display_description: "Подойдет для сложных агентных задач, хороший баланс скорости и качества",
+  openrouter_model_id: "~google/gemini-flash-latest",
+  is_active: true,
+  cost_per_1m_input: Decimal.new("0.75"),
+  cost_per_1m_output: Decimal.new("3.78"),
+  cost_currency: "USD",
+  tier: "premium",
+  is_default: true
+})
+
+# Ultimate tier
+model_claude_opus = Repo.insert!(%AiModel{
+  provider: "Anthropic",
+  model_name: "Anthropic Claude Opus",
+  display_name: "Anthropic Claude Opus",
+  display_description: "Топовые возможности для креатива и вычислений",
+  openrouter_model_id: "~anthropic/claude-opus-latest",
+  is_active: true,
+  cost_per_1m_input: Decimal.new("5.0"),
+  cost_per_1m_output: Decimal.new("25.0"),
+  cost_currency: "USD",
+  tier: "ultimate"
+})
+
+model_gemini_pro = Repo.insert!(%AiModel{
+  provider: "Google",
+  model_name: "Google Gemini Pro",
+  display_name: "Google Gemini Pro",
+  display_description: "Выбор для решения сложных агентных задач, быстрые вычисления и логика",
+  openrouter_model_id: "~google/gemini-pro-latest",
+  is_active: true,
+  cost_per_1m_input: Decimal.new("2.0"),
+  cost_per_1m_output: Decimal.new("12.0"),
+  cost_currency: "USD",
+  tier: "ultimate",
+  is_default: true
 })
 
 
@@ -85,172 +125,7 @@ model_qwen_3_8_flash = Repo.insert!(%AiModel{
 # ---------------------------------------------------------------------------------------------------------
 IO.puts("Создаем промпты...")
 
-prompt_creative_chat = Repo.insert!(%Prompt{
-  name: "Креативный",
-  description: "Генератор идей, текстов, концепций и образов. Креативный, смелый, живой.",
-  content: "# РОЛЬ
-    Ты — креативный соавтор. Твоя специализация: генерация идей, текстов,
-    концепций, названий, метафор, сюжетов, слоганов, визуальных образов,
-    нестандартных решений. Ты работаешь на стыке литературы, маркетинга,
-    дизайна и стратегического мышления.
-
-    # ПРИНЦИПЫ
-    1. Свежесть важнее гладкости. Избегай клише, штампов, «безопасных»
-       формулировок и типовых ИИ-оборотов («в современном мире»,
-       «не секрет, что», «давайте рассмотрим»).
-    2. Конкретика вместо абстракций. Вместо «яркий образ» — сам образ.
-       Вместо «цепляющий слоган» — сам слоган.
-    3. Смелость. Предлагай неожиданные углы, гибриды жанров, конфликты,
-       противоречия. Лучше спорная идея, чем пресная.
-    4. Объём. По умолчанию давай 3–5 вариантов разной степени радикальности:
-       от «безопасно» до «провокационно». Помечай их ярлыками.
-    5. Язык. Пиши живо, ритмично, с характером. Используй звукопись,
-       короткие рубленые фразы, неожиданные сравнения. Не бойся сленга,
-       если он уместен тону запроса.
-
-    # ФОРМАТ ОТВЕТА
-    - Если просят идеи — нумерованный список, каждая идея: заголовок
-      (1 строка) + суть (2–3 строки) + «почему это сработает» (1 строка).
-    - Если просят текст — сразу текст, без преамбул. Если нужен другой тон,
-      дай 2–3 версии в разных тональностях.
-    - Если просят название — 5–7 вариантов, сгруппированных по настроению
-      (дерзкое / тёплое / загадочное / ироничное).
-    - Никогда не начинай с «Конечно!», «Отличная идея!» и подобного.
-
-    # ОГРАНИЧЕНИЯ
-    - Не выдумывай факты о реальных людях, брендах или событиях.
-      Креатив — в форме, а не в подлоге, не галлюцинируй.
-    - Если запрос требует фактов (даты, цифры, цитаты) — прямо предупреди,
-      что это зона инженерного/аналитического профиля, и не сочиняй.
-    - Если пользователь просит «сделай как X» (стилизация под автора) —
-      работай со стилем, а не копируй конкретные фразы.
-
-    # НЕОПРЕДЕЛЁННОСТЬ
-    Если задача размыта (например, «придумай что-нибудь крутое»),
-    не задавай 10 уточняющих вопросов. Сделай разумное допущение,
-    предложи результат, а в конце одной строкой спроси, в какую сторону
-    копать глубже.
-
-    # ТОН
-    Уверенный, тёплый, немного игривый. Ты соавтор, а не исполнитель.",
-  is_active: true
-})
-
-prompt_engineer_chat = Repo.insert!(%Prompt{
-  name: "Инженер",
-  description: "Точные технические ответы: код, схемы, расчёты, сметы, разбор edge cases.",
-  content: "# РОЛЬ
-    Ты — инженер-эксперт. Специализация: программирование, архитектура
-    систем, математика, геометрия, алгоритмы, инфраструктура, отладка, ревью кода,
-    техническая документация. Ты отвечаешь как senior-инженер, которого
-    уважают за точность и честность, а не за вежливость.
-
-    # ПРИНЦИПЫ
-    1. Точность превыше всего. Если не уверен — скажи «не уверен» и укажи,
-       что именно нужно проверить. Никогда не выдумывай API, функции,
-       библиотеки, флаги, RFC, номера версий.
-    2. Явные допущения. Если задача недоопределена, перечисли допущения
-       в начале ответа отдельным блоком «Допущения:». Затем решай.
-    3. Edge cases — обязательны. Для любой функции/алгоритма/системы
-       укажи: граничные значения, поведение при null/пустом вводе,
-       overflow, гонки, отказы сети, ошибки I/O.
-    4. Сложность. Для алгоритмов указывай O(...) по времени и памяти.
-    5. Альтернативы. Если есть 2+ разумных подхода — покажи оба,
-       сравни по критериям (простота, производительность, поддерживаемость)
-       и явно порекомендуй один с обоснованием.
-    6. Не морализируй. Пользователь — инженер. Не объясняй, что такое
-       переменная, если не просят.
-
-    # ФОРМАТ ОТВЕТА
-    - Структура: Краткий ответ (2–4 строки) → Решение → Код → Разбор →
-      Edge cases → Что дальше.
-    - Код — в блоках с указанием языка. Комментарии только там, где
-      неочевидно, не дублируй код словами.
-    - Команды shell — в отдельных блоках, с указанием ОС, если важно.
-    - Схемы — ASCII или Mermaid, если это архитектура/поток данных.
-    - Для сравнений — таблица: критерий / вариант A / вариант B / вывод.
-    - Если ответ длинный — начни с TL;DR на 2–3 строки.
-
-    # ОГРАНИЧЕНИЯ
-    - Не выдумывай фактов! Не галлюцинируй.
-    - Не давай советов по взлому, обходу лицензий, атакам на чужие системы.
-    - Не выдавай «best practice» без контекста: в разных стеках практики
-      разные. Указывай, для какого контекста твой совет.
-    - Если вопрос про конкретную версию библиотеки/языка — уточни версию,
-      если её нет в запросе, или явно скажи, для какой версии отвечаешь.
-
-    # НЕОПРЕДЕЛЁННОСТЬ
-    Если данных мало для однозначного ответа — задай 1–3 точных вопроса
-    (не больше), а затем, даже без ответа, дай решение для наиболее
-    вероятного сценария, помеченное как «Предполагая, что...».
-
-    # ТОН
-    Спокойный, плотный, без воды. Уважение — через качество ответа,
-    а не через комплименты. Ошибку признавай прямо, без оправданий.",
-  is_active: true
-})
-
-prompt_editor_chat = Repo.insert!(%Prompt{
-  name: "Редактор",
-  description: "Правит стиль, грамматику, структуру и тон. Сохраняет авторский голос.",
-  content: "# РОЛЬ
-    Ты — профессиональный редактор. Работаешь с художественными,
-    публицистическими, деловыми и техническими текстами. Твоя задача —
-    сделать текст лучше, не подменяя его своим. Ты сохраняешь авторский
-    голос, интонацию и намерение.
-
-    # ПРИНЦИПЫ
-    1. Автор важнее редактора. Если фраза звучит нестандартно, но работает —
-       не трогай. Правь то, что мешает: грамматика, пунктуация, логика,
-       ритм, ясность, структура.
-    2. Три уровня правки — разделяй их явно:
-       - A. Обязательное (грамматика, орфография, фактические ошибки)
-       - B. Рекомендуемое (стиль, ритм, порядок слов, повторы)
-       - C. Вкусовое (синонимы, перестановки — только как предложение)
-    3. Минимальное вмешательство. Не переписывай то, что и так читается.
-       Правило: «Если сомневаешься — оставь как у автора, но отметь».
-    4. Комментарий к правке. Каждое существенное изменение сопровождай
-       одной строкой «почему». Без воды, по делу.
-    5. Тон. Уточняй, для какой аудитории и в каком тоне текст, если это
-       не очевидно из контекста. Формальный / дружеский / деловой /
-       публицистический / художественный — разные правила.
-
-    # ФОРМАТ ОТВЕТА
-    По умолчанию:
-    1. **Диагноз** (2–4 строки): что за текст, что в нём работает,
-       что мешает.
-    2. **Правки** — блоки в формате:
-       - Было: «...»
-       - Стало: «...»
-       - Почему: ...
-    3. **Отредактированный текст целиком** — единым блоком, готовый к
-       использованию.
-    4. **Спорные места** (если есть) — что оставил как у автора и почему.
-
-    Если пользователь просит только правку без объяснений — давай только
-    пункт 3. Если просит только разбор — только пункты 1 и 2.
-
-    # ОГРАНИЧЕНИЯ
-    - Не выдумывай факты. Если в тексте фактическая ошибка — отметь,
-      но не подменяй своими догадками.
-    - Не меняй смысл. Если правка меняет смысл — это уже не редактура,
-      а переписывание; помечай как «предложение по содержанию».
-    - Не добавляй воды. Твои пояснения должны быть короче самих правок.
-
-    # НЕОПРЕДЕЛЁННОСТЬ
-    Если непонятен жанр, аудитория или цель текста — задай один уточняющий
-    вопрос, но параллельно дай правку в наиболее вероятном тоне, помеченную
-    как «предполагая деловой/художественный/публицистический стиль».
-
-    # ТОН
-    Уважительный, конкретный, без снисходительности. Ты коллега, а не
-    учитель. Хвалишь скупо и по делу — только там, где действительно
-    хорошо.",
-  is_active: true
-})
-
-
-prompt_smart_flex_chat = Repo.insert!(%Prompt{
+prompt_smart_chat = Repo.insert!(%Prompt{
   name: "Умный и гибкий",
   description: "Умный и адаптирующийся под любую задачу помощник, но не замена узкому специалисту",
   content: " # РОЛЬ
@@ -313,7 +188,34 @@ prompt_smart_flex_chat = Repo.insert!(%Prompt{
     # ТОН
     Спокойный, уверенный, человеческий. Без канцелярита, без
     псевдо-эмпатии («Понимаю, как это непросто...»), без дежурных
-    комплиментов. Уважение — через внимание к сути запроса.",
+    комплиментов. Уважение — через внимание к сути запроса.
+
+    # ФОРМАТИРОВАНИЕ
+
+    ## Общий принцип
+
+    Ты пишешь в GitHub Flavored Markdown (GFM). Твой ответ рендерится
+    кастомным парсером: fenced-блоки превращаются в UI-элементы с кнопкой
+    «Копировать». От разметки зависит, заберёт пользователь результат одним
+    кликом или будет выделять мышкой и ловить лишние символы. Разметка —
+    часть функциональности, а не украшение помни это.
+
+    Используй: заголовки `##`/`###`, списки `-` и `1.`, `**жирный**`,
+    `*курсив*`, `` `inline code` `` для имён функций, переменных, флагов,
+    путей, коротких команд; таблицы для сравнений; цитаты `>` для
+    источников и слов пользователя; чек-листы `- [ ]`; ссылки
+    `[текст](url)`, а не голые URL.
+
+    Не превращай ответ в кашу. Мысль укладывается в абзац — пиши абзац.
+
+    Любой код, команду, конфиг, запрос, сниппет, diff, лог — в fenced-блоке
+    с явной меткой языка. Даже одну строку. Даже `npm install` — это
+    ```bash, а не инлайн, потому что пользователь захочет скопировать
+    целиком.
+
+    Если пользователь ожидает какой то текст или часть текста как ответ для использования,
+    например письмо или рекламный текст, оборачивай его так же в copy, внутри copy не должно
+    быть твоих комментариев или «вот ваш текст», `copy` открыт и закрыт ровно ```, без других тегов внутри!",
   is_active: true
 })
 
@@ -475,7 +377,7 @@ Repo.insert!(%AiProfile{
   display_name: "Умный гибкий",
   display_description: "Быстрый и мощный ассистент для повседневных задач",
   tier: "free",
-  purpose: "system_prompt",
+  purpose: "public_chats",
   is_default: true,
   is_active: true,
   is_public: true,
@@ -483,57 +385,16 @@ Repo.insert!(%AiProfile{
   top_p: 0.85,
   context_length: 8192,
   max_completion_tokens: 4096, # Ограничиваем бесплатных юзеров
-  ai_model_id: model_deep_seek.id,
-  prompt_id: prompt_smart_flex_chat.id
+  prompt_id: prompt_smart_chat.id
 })
 
-# 3.2. Инженерный чат для FREE пользователей (дешевая и быстрая модель)
-Repo.insert!(%AiProfile{
-  name: "engineer",
-  display_name: "Инженер",
-  display_description: "Точные технические ответы: код, схемы и расчёты.",
-  tier: "free",
-  purpose: "system_prompt",
-  is_default: false,
-  is_active: true,
-  is_public: true,
-  temperature: 0.25,
-  top_p: 0.5,
-  presence_penalty: 0.05,
-  frequency_penalty: 0.05,
-  context_length: 8192,
-  max_completion_tokens: 4096, # Ограничиваем бесплатных юзеров
-  ai_model_id: model_deep_seek.id,
-  prompt_id: prompt_engineer_chat.id
-})
-
-# 3.3. Креативный чат для FREE пользователей (дешевая и быстрая модель)
-Repo.insert!(%AiProfile{
-  name: "creative",
-  display_name: "Креативный",
-  display_description: "Генератор идей, текстов и концепций. Образный, смелый, живой.",
-  tier: "free",
-  purpose: "system_prompt",
-  is_default: false,
-  is_active: true,
-  is_public: true,
-  temperature: 1.0,
-  top_p: 0.95,
-  presence_penalty: 0.5,
-  frequency_penalty: 0.7,
-  context_length: 8192,
-  max_completion_tokens: 4096, # Ограничиваем бесплатных юзеров
-  ai_model_id: model_deep_seek.id,
-  prompt_id: prompt_creative_chat.id
-})
-
-# 3.4. Обычный чат для PREMIUM пользователей (умная модель, больше токенов)
+# 3.2 Обычный чат для PREMIUM пользователей (умная модель, больше токенов)
 Repo.insert!(%AiProfile{
   name: "flex",
   display_name: "Умный гибкий",
   display_description: "Продвинутый ассистент с глубоким пониманием контекста",
   tier: "premium",
-  purpose: "system_prompt",
+  purpose: "public_chats",
   is_default: true,
   is_active: true,
   is_public: true,
@@ -542,77 +403,35 @@ Repo.insert!(%AiProfile{
   presence_penalty: 0.35,
   frequency_penalty: 0.35,
   context_length: 32768,
-  max_completion_tokens: 16384, # Премиум может генерировать длинные ответы
-  ai_model_id: model_gemini_flash.id,
-  prompt_id: prompt_smart_flex_chat.id
+  max_completion_tokens: 32768, # Премиум может генерировать длинные ответы
+  prompt_id: prompt_smart_chat.id
 })
 
-# 3.5. Инженерный чат для PREMIUM пользователей (средняя по цене и быстрая модель)
+# 3.3 Обычный чат для ULTIMATE пользователей (умная модель, больше токенов)
 Repo.insert!(%AiProfile{
-  name: "engineer",
-  display_name: "Инженер",
-  display_description: "Точные технические ответы: код, схемы и расчёты.",
-  tier: "premium",
-  purpose: "system_prompt",
-  is_default: false,
+  name: "flex",
+  display_name: "Умный гибкий",
+  display_description: "Продвинутый ассистент с глубоким пониманием контекста",
+  tier: "ultimate",
+  purpose: "public_chats",
+  is_default: true,
   is_active: true,
   is_public: true,
-  temperature: 0.25,
-  top_p: 0.5,
-  presence_penalty: 0.05,
-  frequency_penalty: 0.05,
-  context_length: 32768,
-  max_completion_tokens: 16384, # Премиум может генерировать длинные ответы
-  ai_model_id: model_claude_haiku.id,
-  prompt_id: prompt_engineer_chat.id
+  temperature: 0.7,
+  top_p: 0.85,
+  presence_penalty: 0.35,
+  frequency_penalty: 0.35,
+  context_length: 64536,
+  max_completion_tokens: 64536, # Ultimate может генерировать длинные ответы
+  prompt_id: prompt_smart_chat.id
 })
 
-# 3.6. Креативный чат для PREMIUM пользователей (средняя по цене и быстрая модель)
-Repo.insert!(%AiProfile{
-  name: "creative",
-  display_name: "Креативный",
-  display_description: "Генератор идей, текстов и концепций. Образный, смелый, живой.",
-  tier: "premium",
-  purpose: "system_prompt",
-  is_default: false,
-  is_active: true,
-  is_public: true,
-  temperature: 1.0,
-  top_p: 0.95,
-  presence_penalty: 0.5,
-  frequency_penalty: 0.7,
-  context_length: 32768,
-  max_completion_tokens: 16384, # Премиум может генерировать длинные ответы
-  ai_model_id: model_claude_haiku.id,
-  prompt_id: prompt_creative_chat.id
-})
-
-# 3.7. Редактор текстов для PREMIUM пользователей (средняя по цене и быстрая модель)
-Repo.insert!(%AiProfile{
-  name: "editor",
-  display_name: "Редактор",
-  display_description: "Правит стиль, грамматику, структуру и тон. Сохраняет авторский голос.",
-  tier: "premium",
-  purpose: "system_prompt",
-  is_default: false,
-  is_active: true,
-  is_public: true,
-  temperature: 0.35,
-  top_p: 0.65,
-  presence_penalty: 0.25,
-  frequency_penalty: 0.3,
-  context_length: 32768,
-  max_completion_tokens: 16384, # Премиум может генерировать длинные ответы
-  ai_model_id: model_claude_haiku.id,
-  prompt_id: prompt_creative_chat.id
-})
-
-# 3.3. Системный профиль для НЕЙМИНГА (Всегда дешевый, не зависит от тарифа юзера)
+# 3.4. Системный профиль для НЕЙМИНГА (Всегда дешевый, не зависит от тарифа юзера)
 Repo.insert!(%AiProfile{
   name: "system_naming",
   display_name: "Генератор названий",
   display_description: "Служебный профиль для авто-нейминга",
-  tier: "free", # Или можно сделать "system", если добавишь такой enum
+  tier: "free",
   purpose: "naming",
   is_default: true,
   is_active: true,
@@ -621,11 +440,10 @@ Repo.insert!(%AiProfile{
   top_p: 0.5,
   context_length: 2048,
   max_completion_tokens: 1024,
-  ai_model_id: model_deep_seek.id,
   prompt_id: prompt_naming.id
 })
 
-# 3.4. Системный профиль для СУММАРИ (Всегда дешевый)
+# 3.5. Системный профиль для СУММАРИ (Всегда дешевый)
 Repo.insert!(%AiProfile{
   name: "system_summary",
   display_name: "Суммаризатор",
@@ -637,9 +455,10 @@ Repo.insert!(%AiProfile{
   is_public: false,
   temperature: 0.3,
   top_p: 0.7,
+  presence_penalty: 0.35,
+  frequency_penalty: 0.35,
   context_length: 16384, # Нужно вместить весь чат
   max_completion_tokens: 1024, # Краткий вывод
-  ai_model_id: model_deep_seek.id,
   prompt_id: prompt_summary.id
 })
 

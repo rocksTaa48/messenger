@@ -6,49 +6,65 @@ defmodule MessengerWeb.Actions.ChatActions do
   alias Messenger.Serializer
 
   @doc"""
+  NEW:                Функция 'click_new' подготавливает нам создание нового чата
+  """
+  def handle_in("click_new", _payload, socket) do
+    current_user = socket.assigns.current_user
+    ai_model_id = current_user.ai_model_id
+    ai_models = AiProfiles.get_all_users_ai_models()
+    case build_ai_profile(current_user, nil) do
+      {:ok, %{model: model, profile: profile}} ->
+      formatted_ai_models = Enum.map(ai_models, &Serializer.ai_model_serialize/1)
+      formatted_user_ai_model = Serializer.ai_model_serialize(model)
+      formatted_user_ai_profile = Serializer.ai_profile_serialize(profile)
+      overrides = profile |> Map.take([:temperature, :top_p, :presence_penalty, :frequency_penalty])
+      new_state = socket.assigns.state
+                  |> Map.put("ai_model", formatted_user_ai_model)
+                  |> Map.put("ai_models", formatted_ai_models)
+                  |> Map.put("ai_profile", formatted_user_ai_profile)
+                  |> Map.put("profile_overrides", overrides)
+
+      push(socket, "sync", new_state)
+      {:reply, :ok, assign(socket, :state, new_state)}
+    end
+  end
+
+  @doc"""
   SHOW:               Функция 'click_open' открывает чат и показывает нам его содержимое
   """
   def handle_in("click_open", %{"chat_id" => chat_id}, socket) do
     current_user = socket.assigns.current_user
-    chat = Chats.get_chat(current_user.id, chat_id)
-
     messages = Chats.get_chat_messages(chat_id, current_user.id)
     serialized_messages = Enum.map(messages, &Serializer.message_serialize/1)
+    ai_models = AiProfiles.get_all_users_ai_models()
+    chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
 
-    ai_profiles = AiProfiles.available_user_profiles() # Получаем вообще все профили
-    formatted_profiles = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
+    case build_ai_profile(current_user, chat) do
+      {:ok, %{model: model, profile: profile}} ->
+        formatted_ai_models = Enum.map(ai_models, &Serializer.ai_model_serialize/1)
+        formatted_user_ai_model = Serializer.ai_model_serialize(model)
+        formatted_user_ai_profile = Serializer.ai_profile_serialize(profile)
+        new_state = socket.assigns.state
+                    |> Map.put("ai_model", formatted_user_ai_model)
+                    |> Map.put("ai_models", formatted_ai_models)
+                    |> Map.put("ai_profile", formatted_user_ai_profile)
+                    |> Map.put("active_chat", %{
+          "id" => chat.id,
+          "group_id" => chat.group_id,
+          "profile_overrides" => chat.profile_overrides,
+          "ai_model_id" => to_string(chat.ai_model_id),
+          "messages" => serialized_messages,
+          "has_more_messages" => length(serialized_messages) >= 15
+        })
 
-
-    chat_ai_profile = case chat.ai_profile_id do # Получаем профиль чата
-      nil -> nil
-      "" -> nil
-      chat_profile ->
-        Enum.find(ai_profiles, fn profile -> profile.id == chat.ai_profile_id and profile.tier == current_user.status end)
+        push(socket, "sync", new_state)
+        {:reply, :ok, assign(socket, :state, new_state)}
     end
-
-    user_default_ai_profile = Enum.find(ai_profiles, fn profile -> profile.is_default == true and profile.tier == current_user.status end)
-
-    current_profile = chat_ai_profile || user_default_ai_profile
-
-    formatted_current_ai_profile = Serializer.ai_profile_serialize(current_profile)
-
-
-    new_state =
-      socket.assigns.state
-      |> Map.put("active_chat", %{
-        "id" => chat_id,
-        "group_id" => chat.group_id,
-        "messages" => serialized_messages,
-        "ai_profile" => formatted_current_ai_profile,
-        "has_more_messages" => length(serialized_messages) >= 15
-      })
-      |> Map.put("ai_profiles", formatted_profiles)
-
-    push(socket, "sync", new_state)
-    {:reply, :ok, assign(socket, :state, new_state)}
   end
 
-  # ==============================ЛЕНИВАЯ ПОДГРУЗКА СТАРЫХ СООБЩЕНИЙ==================================
+  @doc"""
+  LOAD_MORE_MESSAGES функция ленивой подгрузки сообшений из истории
+  """
   def handle_in("load_more_messages", payload, socket) do
     IO.inspect(payload, label: "CHAT ACTIONS LOAD MORE")
 
@@ -93,81 +109,28 @@ defmodule MessengerWeb.Actions.ChatActions do
     end
   end
 
-
   @doc"""
-  NEW:                Функция 'click_new' подготавливает нам создание нового чата
-  """
-  def handle_in("click_new", _payload, socket) do
-    current_user = socket.assigns.current_user
-    ai_profiles = AiProfiles.available_user_profiles() # Получаем вообще все профили
-    user_default_ai_profile = Enum.find(ai_profiles, fn profile -> profile.is_default == true and profile.tier == current_user.status end)
-
-    formatted_profiles = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
-    formatted_user_default_ai_profile = Serializer.ai_profile_serialize(user_default_ai_profile)
-
-    # Дополняем дерево массивом ai_profiles
-    new_state = socket.assigns.state
-                |> Map.put("ai_profiles", formatted_profiles)
-                |> Map.put("ai_profile", formatted_user_default_ai_profile)
-
-    push(socket, "sync", new_state)
-    {:reply, :ok, assign(socket, :state, new_state)}
-  end
-
-  @doc"""
-  CREATE_CHAT_AND_MESSAGE:    Мультифункция создает чат и сообщение в нем от пользователя
+  CREATE_MESSAGE:    Мультифункция создает чат и сообщение в нем от пользователя
   """
   def handle_in("click_submit_message", payload, socket) do
-    current_user = socket.assigns.current_user
     chat_id = Map.get(payload, "chat_id")
     content = Map.get(payload, "text")
-    ai_profile_id = Map.get(payload, "ai_profile_id")
-
-    IO.inspect({chat_id, ai_profile_id}, label: "=== chat_id / ai_profile_id ===")
-
-    # Проверяем есть ли чат? Тоесть будет выполнено добавление сообщения в текущий чат или создание нового
+    current_user = socket.assigns.current_user
+    ai_models = AiProfiles.get_all_users_ai_models()
     chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
-
-    # Достаем AI профиль текущего чата, если таковой имеется
-    chat_ai_profile_id = if chat, do: chat.ai_profile_id, else: nil
-
-    available_user_ai_profiles = AiProfiles.available_user_profiles(current_user.status)
-
-    available_ai_profiles_ids = Enum.map(available_user_ai_profiles, fn profile -> profile.id end)
-
-    # Здесь может не красиво, зато наглядно мы ищем AI профиль,
-    # 1) это введенный вручную, 2) закрепленный за чатом, 3) фоллбэк на пользовательский по умолчанию
-    ai_profile =
-      case ai_profile_id do
-        nil -> nil
-        profile_id ->
-          if profile_id in available_ai_profiles_ids do
-            Enum.find(available_user_ai_profiles, fn profile -> profile.id == profile_id end)
-          else
-            nil
-          end
-      end
-
-      |> case do
-           nil ->
-             if chat_id && chat_ai_profile_id in available_ai_profiles_ids do
-               Enum.find(available_user_ai_profiles, fn profile -> profile.id == chat_ai_profile_id end)
-             else
-               nil
-             end
-           profile -> profile
-         end
-      |> case do
-           nil -> AiProfiles.get_default_chat_user_ai_profile(current_user.status)
-           profile -> profile
-         end
 
     action =
       case chat do
         nil ->
-          create_chat_and_first_message(current_user, ai_profile, content)
+          case build_ai_profile(current_user, chat, payload) do
+            {:ok, %{model: model, profile: profile}} ->
+              create_chat_and_first_message(current_user, model, profile, content)
+          end
         existing_chat ->
-          create_message_in_existing_chat(current_user, ai_profile, existing_chat, content)
+          case build_ai_profile(current_user, chat) do
+            {:ok, %{model: model, profile: profile}} ->
+              create_message_in_existing_chat(current_user, model, profile, existing_chat, content)
+          end
       end
 
     case action do
@@ -176,55 +139,133 @@ defmodule MessengerWeb.Actions.ChatActions do
         {:reply, {:ok, %{
           "group_id" => chat.group_id, # Что бы при выходе < назад не падать в ебеня
           "chat_id" => chat.id, # Что бы знать что за чат вообще
-          "message_id" => message.id}}, # Отдать реальный айдишник сообщения
+          "message_id" => message.id, # Отдать реальный айдишник сообщения
+          "ai_model_id" => to_string(chat.ai_model_id),
+          "profile_overrides" => chat.profile_overrides
+        }},
           socket}
-
       {:error, _reason} ->
         {:reply, {:error, %{reason: "failed_to_process_message"}}, socket}
     end
   end
 
-  # Хелпер: создание нового сообщения в новом чате
-  defp create_chat_and_first_message(user, ai_profile, content) do
+  @doc"""
+  HELPER build_ai_profile: Помогает собрать актуальный стейт, приоритетной модели и приоритетных настроек
+  для отправки в модель перед генерацией.
+  """
+  defp build_ai_profile(current_user, chat, payload \\ %{}) do
+    default_user_ai_profile = AiProfiles.get_default_user_ai_profile(current_user.status) # Default user AiProfile
+    ai_models = AiProfiles.get_all_users_ai_models() # All models in application
+    user_ai_profile = current_user.profile_overrides || %{} # User ai_profile overrides top_p, temperature...
+    user_ai_model_id = current_user.ai_model_id # User global ai_model (change in settings user profile)
+
+    payload_ai_model_id = Map.get(payload, "ai_model_id") # Get ai_model_id
+    payload_overrides = Map.get(payload, "profile_overrides") || %{} # Get chat_ai_profile_overrides
+
+    available_user_models = Enum.filter(ai_models, fn m -> m.tier == current_user.status and m.is_active == true end)
+
+    user_overrides =
+      user_ai_profile
+      |> Map.take(["temperature", "top_p", "presence_penalty", "frequency_penalty"])
+      |> Map.new(fn {k, v} -> {String.to_existing_atom(k), v} end)
+
+    case chat do
+      nil ->
+        overrides =
+          payload_overrides
+          |> Map.take(["temperature", "top_p", "presence_penalty", "frequency_penalty"])
+          |> Map.new(fn {k, v} -> {String.to_existing_atom(k), v} end)
+
+        current_ai_model =
+          with nil <- Enum.find(available_user_models, fn m -> m.id == payload_ai_model_id end),
+               nil <- Enum.find(available_user_models, fn m -> m.id == user_ai_model_id end) do
+            Enum.find(ai_models, fn m -> m.tier == current_user.status and m.is_active == true and m.is_default == true end)
+          else
+            model -> model
+          end
+
+        current_ai_profile =
+          default_user_ai_profile
+          |> Map.from_struct()
+          |> Map.merge(user_overrides)
+          |> Map.merge(overrides)
+
+        {:ok, %{model: current_ai_model, profile: current_ai_profile}}
+
+      chat ->
+        current_chat_ai_profile = chat.profile_overrides || %{}
+        current_chat_model_id = chat.ai_model_id
+
+        current_ai_model =
+          with nil <- Enum.find(available_user_models, fn m -> m.id == current_chat_model_id end),
+               nil <- Enum.find(available_user_models, fn m -> m.id == user_ai_model_id end) do
+            Enum.find(ai_models, fn m -> m.tier == current_user.status and m.is_active == true and m.is_default == true end)
+          else
+            model -> model
+          end
+
+        chat_overrides =
+          current_chat_ai_profile
+          |> Map.take(["temperature", "top_p", "presence_penalty", "frequency_penalty"])
+          |> Map.new(fn {k, v} -> {String.to_existing_atom(k), v} end)
+
+        current_ai_profile =
+          default_user_ai_profile
+          |> Map.from_struct()
+          |> Map.merge(user_overrides)
+          |> Map.merge(chat_overrides)
+
+        {:ok, %{model: current_ai_model, profile: current_ai_profile}}
+    end
+  end
+
+  @doc"""
+  HELPER create_chat_and_first_message: Создает сообщение в первый раз, вместе с чатом и настройками из payload
+  """
+  defp create_chat_and_first_message(user, model, profile, content) do
 
     naming_ai_profile =  AiProfiles.get_default_system_user_ai_profile(user.status, "naming")
+    serialized_profile = Serializer.profile_for_api_serialize(profile)
+    overrides = profile |> Map.take([:temperature, :top_p, :presence_penalty, :frequency_penalty])
+    IO.inspect(overrides, label: "<_________________CREATE MESSAGE OVERRIDES INSPECT")
 
-    case Chats.first_time_create_chat_and_message(
-           user.id,
-           ai_profile.id,
-           ai_profile.ai_model.openrouter_model_id,
-           content
-         ) do
+    case Chats.first_time_create_chat_and_message(user.id, content, model.id, overrides) do
+
       {:ok, %{chat: chat, message: message}} ->
         context = Chats.get_ai_context(chat.id)
-        Chats.ChatsAgent.start_and_process(user.id, chat.id, ai_profile, context)
-        Chats.ChatNameCreator.start_generation(user.id, chat.id, naming_ai_profile, content)
+        Chats.ChatsAgent.start_and_process(user.id, chat.id, model, serialized_profile, context)
+        Chats.ChatNameCreator.start_generation(user.id, chat.id, model, naming_ai_profile, content)
         {:ok, chat, message}
       {:error, _failed_step, _failed_value, _changesets} ->
         {:error, "db_insert_failed"}
     end
   end
 
-  # Хелпер: создание нового сообщения в уже существующем чате
-  defp create_message_in_existing_chat(user, ai_profile, chat, content) do
-    case Chats.create_message(chat.id, content) do
+  @doc"""
+  HELPER create_message_in_existing_chat: Создает сообщение уже в существующем чате, настройки подтягиваются из БД
+  """
+  defp create_message_in_existing_chat(user, model, profile, chat, content) do
+    case Chats.create_message(chat.id, model.id, content) do
       {:ok, message} ->
         context = Chats.get_ai_context(chat.id)
-        Chats.ChatsAgent.start_and_process(user.id, chat.id, ai_profile, context)
-        start_summary(user, chat)
+        serialized_profile = Serializer.profile_for_api_serialize(profile)
+        Chats.ChatsAgent.start_and_process(user.id, chat.id, model, serialized_profile, context)
+        start_summary(user, model, chat)
         {:ok, chat, message}
       {:error, _changeset} ->
         {:error, "message_insert_failed"}
     end
   end
 
-  # Хелпер: создание саммари для чата
-  defp start_summary(user, chat) do
+  @doc"""
+  HELPER start_summary: Запускает процесс суммаризации истории чата, для экономии токенов
+  """
+  defp start_summary(user, model, chat) do
     count = Chats.get_messages_each_summary(chat.id, chat.summarized_up_to_message_id)
 
     if count >= 20 do
       # получаем системный профиль для суммаризатора
-      summary_ai_profile = AiProfiles.get_default_system_user_ai_profile(user.status, "summary")
+      naming_ai_profile =  AiProfiles.get_default_system_user_ai_profile(user.status, "summary")
       # get_messages_for_summary/3 отдает не только последние сообщения от summarized_up_to_message_id,
       # но и старый summary что бы его не забыть.
       summary_context = Chats.get_messages_for_summary(chat.id, chat.summarized_up_to_message_id, chat.summary)
@@ -236,7 +277,8 @@ defmodule MessengerWeb.Actions.ChatActions do
           Chats.ChatSummaryCreator.start_generation(
             user.id,
             chat.id,
-            summary_ai_profile,
+            model,
+            naming_ai_profile,
             %{summary: summary, context: context, last_msg_id: last_msg_id}
           )
         {:error, _} ->
@@ -254,7 +296,6 @@ defmodule MessengerWeb.Actions.ChatActions do
     action = Map.get(payload, "action")
     group_id_raw = Map.get(payload, "group_id")
     chat_id = Map.get(payload, "chat_id")
-    ai_profile_id = Map.get(payload, "ai_profile_id")
     title = Map.get(payload, "title")
     chat = Chats.get_chat(current_user.id, chat_id)
 
@@ -306,48 +347,39 @@ defmodule MessengerWeb.Actions.ChatActions do
   """
   def handle_in("click_update_chat_insight", payload, socket) do
     current_user = socket.assigns.current_user
-    action = Map.get(payload, "action")
     chat_id = Map.get(payload, "chat_id")
-    ai_profile_id = Map.get(payload, "ai_profile_id")
+    ai_model_id = Map.get(payload, "ai_model_id")
+    payload_overrides = Map.get(payload, "profile_overrides")
 
-    action_result =
-      case action do
-        "update_ai_profile" ->
-          Chats.update_chat(chat_id, current_user.id, %{"ai_profile_id" => ai_profile_id})
-        unknown             ->
-          {:error, "unknown_action"}
-      end
+    chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
 
-    ai_profiles = AiProfiles.available_user_profiles() # Получаем вообще все
-    chat = Chats.get_chat(current_user.id, chat_id)
-
-    messages = Chats.get_chat_messages(chat_id, current_user.id)
-    serialized_messages = Enum.map(messages, &Serializer.message_serialize/1)
-
-    chat_ai_profile = case chat.ai_profile_id do # Получаем профиль чата
-      nil -> nil
-      "" -> nil
-      chat_profile ->
-        Enum.find(ai_profiles, fn profile -> profile.id == chat.ai_profile_id and profile.tier == current_user.status end)
+    action_result = if chat do
+      Chats.update_chat(chat_id, current_user.id, %{ai_model_id: ai_model_id, profile_overrides: payload_overrides || %{}})
+    else
+      {:ok, label: "returned_nil"}  # или что-то другое
     end
 
-    formatted_profiles = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
-    formatted_current_ai_profile = Serializer.ai_profile_serialize(chat_ai_profile)
+    case action_result do
+        {:ok, chat} ->
+          messages = Chats.get_chat_messages(chat.id, current_user.id)
+          serialized_messages = Enum.map(messages, &Serializer.message_serialize/1)
+          new_state = socket.assigns.state
+                      |> Map.put("active_chat", %{
+            "id" => chat.id,
+            "title" => chat.title,
+            "group_id" => chat.group_id,
+            "ai_model_id" => to_string(chat.ai_model_id),
+            "profile_overrides" => chat.profile_overrides,
+            "messages" => serialized_messages,
+            "has_more_messages" => length(serialized_messages) >= 15
+          })
 
-    new_state =
-      socket.assigns.state
-      |> Map.put("active_chat", %{
-        "id" => chat_id,
-        "group_id" => chat.group_id,
-        "title" => chat.title,
-        "messages" => serialized_messages,
-        "ai_profile" => formatted_current_ai_profile,
-        "has_more_messages" => length(serialized_messages) >= 15
-      })
-      |> Map.put("ai_profiles", formatted_profiles)
-
-    push(socket, "sync", new_state)
-    {:reply, :ok, assign(socket, :state, new_state)}
+          push(socket, "sync", new_state)
+          # Сохраняем обновленное состояние в процессе сокета
+          {:reply, :ok, assign(socket, :state, new_state)}
+      {:error, _changeset} ->
+        {:reply, {:error, %{reason: "failed_to_update_chat"}}, socket}
+    end
   end
 
 
@@ -555,35 +587,4 @@ defmodule MessengerWeb.Actions.ChatActions do
         {:reply, {:error, %{reason: "failed_to_remove_group"}}, socket}
     end
   end
-
-  @doc"""
-  ---------------------ПОДРАЗДЕЛ ОПЕРАЦИЙ С СООБЩЕНИЯМИ ЧАТОВ----------------------------
-
-
-  # SEND MESSAGE
-  def handle_in("click_send_message", %{"chat_id" => chat_id, "content" => content}, socket) do
-    current_user = socket.assigns.current_user
-
-    case Chats.create_message(%{chat_id: chat_id, content: content, role: "user"}) do
-        {:ok, user_message} ->
-          formatted_message = Enum.map(user_message, &Serializer.message_serialize/1)
-
-          new_state = socket.assigns.state
-                      |> Map.put("messages", formatted_message )
-          push(socket, "sync", new_state)
-
-          # Сразу же запускаю джобу
-          Task.start_link(fn ->
-            generate_and_stream_ai_response(socket, chat_id, user_message)
-          end)
-
-          # Сохраняем обновленное состояние в процессе сокета
-          {:reply, :ok, assign(socket, :state, new_state)}
-      {:error, _changeset} ->
-        {:reply, {:error, %{reason: "failed_to_send_message"}}, socket}
-    end
-
-
-  end
-  """
 end

@@ -16,6 +16,7 @@ defmodule Messenger.Chats.Message do
     field :metadata, :map, default: %{}
 
     belongs_to :chat, Messenger.Chats.Chat
+    belongs_to :ai_model, Messenger.AiProfiles.AiModel
 
     timestamps(type: :utc_datetime)
   end
@@ -27,6 +28,7 @@ defmodule Messenger.Chats.Message do
       :role,
       :content,
       :chat_id,
+      :ai_model_id,
       :tokens_prompt,
       :tokens_completion,
       :tokens_total,
@@ -34,10 +36,10 @@ defmodule Messenger.Chats.Message do
       :cost_completion,
       :cost_total,
       :metadata])
-    |> validate_required([:role, :content, :chat_id])
+    |> validate_required([:role, :content, :chat_id, :ai_model_id])
     |> validate_inclusion(:role, ["system", "user", "assistant"])
     |> validate_inclusion(:status, ["pending", "send", "error"])
-    |> validate_length(:content, min: 1, max: 8192)
+    |> validate_length(:content, min: 1, max: 16384)
     |> foreign_key_constraint(:chat_id)
   end
 end

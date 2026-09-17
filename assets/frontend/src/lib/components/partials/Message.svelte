@@ -1,6 +1,8 @@
 <script lang="ts">
     import { Copy, Check } from 'lucide-svelte';
     import { renderMarkdown } from '../../markdown';
+    import Icons from './Icons.svelte';
+    import { appState } from '../../../stores/socketStore';
 
     export let messages: Array<{
         id: string | number;
@@ -8,9 +10,19 @@
         content: string;
         created_at: string;
         is_streaming?: boolean;
+        ai_model_id: number | string;
     }>;
 
-    // id скопированного сообщения — чтобы показать галочку на 1.5 сек
+    // Достаем массив моделей из стора
+    $: aiModels = $appState?.ai_models || [];
+
+    // Функция поиска провайдера по ID модели из стора
+    function getProvider(modelId: number | string | undefined): string {
+        if (!modelId) return 'default';
+        const model = aiModels.find(m => String(m.id) === String(modelId));
+        return model?.provider || 'default';
+    }
+
     let copiedId: string | number | null = null;
 
     function formatTime(isoString: string): string {
@@ -34,10 +46,7 @@
         const container = btn.closest('.code-block, .copy-block');
         if (!container) return;
 
-        // Для code-block берём <pre><code>, для copy-block — div[data-copy-source]
-        const source =
-            container.querySelector('pre code') ||
-            container.querySelector('[data-copy-source]');
+        const source = container.querySelector('pre code') || container.querySelector('[data-copy-source]');
         if (!source) return;
 
         const text = source.textContent || '';
@@ -56,35 +65,52 @@
 </script>
 
 {#each messages as msg (msg.id)}
-    <!-- Баббл сообщения: user — справа, assistant — слева -->
-    <div
-            data-message-id={msg.id}
-            class="group flex w-full {msg.role === 'user' ? 'justify-end' : 'justify-start'}"
-    >
-        <div
-                class="max-w-[85%] px-4 py-2.5 text-xs font-medium border rounded-[20px] relative break-words shadow-md text-left
-                {msg.role === 'user'
-                    ? 'bg-[#2481cc]/20 border-[#2481cc]/30 text-white rounded-tr-sm'
-                    : 'bg-white/[0.03] border-white/5 text-gray-200 rounded-tl-sm'}"
-        >
-            <!-- Текст сообщения -->
-            <div class="message-content" on:click={handleContentClick}>
-                {#if msg.role === 'user' || msg.is_streaming}
-                    <!-- Юзеру markdown не нужен; во время стриминга рендерим как plain, чтобы не мигало -->
-                    <p class="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                {:else}
-                    {@html renderMarkdown(msg.content)}
-                {/if}
+    {#if msg.role === 'assistant'}
+        <!-- ЛЕВАЯ СТОРОНА: Вертикальный стек (иконка сверху, текст снизу) -->
+        <div class="group flex w-full flex-col items-start max-w-[85%] mb-4">
+
+            <!-- Круглая иконка бота сверху, прижата к левому краю -->
+            <div class="w-8 h-8 rounded-full bg-[#2481cc] flex items-center justify-center text-white shadow-sm mb-2">
+                <Icons
+                        provider={getProvider(msg.ai_model_id)}
+                        size={16}
+                />
             </div>
 
-            <!-- Нижняя строка: время слева, иконка Copy справа -->
-            <div class="flex items-center justify-between gap-2 mt-1 select-none">
-                <span class="text-[9px] font-bold opacity-40">
-                    {formatTime(msg.created_at)}
-                </span>
+            <!-- Бабл с ответом под иконкой, выровнен по левому краю -->
+            <div class="w-full px-4 py-2.5 text-xs font-medium border rounded-[20px] relative break-words shadow-md text-left bg-white/[0.03] border-white/5 text-gray-200 rounded-tl-sm">
+                <div class="message-content" on:click={handleContentClick}>
+                    {#if msg.is_streaming}
+                        <p class="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                    {:else}
+                        {@html renderMarkdown(msg.content)}
+                    {/if}
+                </div>
+
+                <div class="flex items-center justify-between gap-2 mt-1 select-none">
+                    <span class="text-[9px] font-bold opacity-40">
+                        {formatTime(msg.created_at)}
+                    </span>
+                </div>
             </div>
         </div>
-    </div>
+
+    {:else}
+        <!-- ПРАВАЯ СТОРОНА: Только бабл пользователя, прижат к правому краю -->
+        <div class="group flex w-full justify-end mb-4">
+            <div class="max-w-[85%] px-4 py-2.5 text-xs font-medium border rounded-[20px] relative break-words shadow-md text-left bg-[#2481cc]/20 border-[#2481cc]/30 text-white rounded-tr-sm">
+                <div class="message-content" on:click={handleContentClick}>
+                    <p class="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                </div>
+
+                <div class="flex items-center justify-between gap-2 mt-1 select-none">
+                    <span class="text-[9px] font-bold opacity-40">
+                        {formatTime(msg.created_at)}
+                    </span>
+                </div>
+            </div>
+        </div>
+    {/if}
 {/each}
 
 <style>

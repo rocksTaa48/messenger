@@ -4,15 +4,15 @@ defmodule Messenger.Chats.Chat do
 
   schema "chats" do
     field :title, :string
-    field :model_name, :string
     field :summary, :string
     field :summarized_up_to_message_id, :integer
     field :last_message, :string
+    field :profile_overrides, :map, default: %{}
 
 
     belongs_to :user, Messenger.Accounts.User
-    belongs_to :ai_profile, Messenger.AiProfiles.AiProfile
     belongs_to :group, Messenger.Chats.Group
+    belongs_to :ai_model, Messenger.AiProfiles.AiModel
     has_many :messages, Messenger.Chats.Message
     has_many :pinned_chats, Messenger.Chats.PinnedChat
 
@@ -23,26 +23,26 @@ defmodule Messenger.Chats.Chat do
   def changeset(chat, attrs) do
     chat
     |> cast(attrs, [:title,
-      :model_name,
       :user_id,
-      :ai_profile_id,
       :group_id,
+      :ai_model_id,
       :summary,
       :summarized_up_to_message_id,
       :last_message,
+      :profile_overrides,
     ])
     |> validate_required([:user_id])
     |> validate_length(:title, min: 0, max: 100)
     |> foreign_key_constraint(:user_id)
-    |> foreign_key_constraint(:ai_profile_id)
     |> foreign_key_constraint(:group_id)
   end
 
-  def changeset_for_update_last_message(chat, attrs) do
+  def changeset_for_update_last_message_or_model(chat, attrs) do
     chat
-    |> cast(attrs, [:last_message])
+    |> cast(attrs, [:last_message, :ai_model_id])
     |> validate_length(:last_message, max: 5000)
   end
+
 
   def changeset_for_update_summary(chat, attrs) do
     chat

@@ -20,10 +20,7 @@ defmodule Messenger.AiProfiles.AiProfile do
     field :purpose, :string, default: "public_chats"
     field :metadata, :map, default: %{}
 
-    has_many :chats, Messenger.Chats.Chat
-
     belongs_to :prompt, Messenger.AiProfiles.Prompt
-    belongs_to :ai_model, Messenger.AiProfiles.AiModel
 
     timestamps(type: :utc_datetime)
   end
@@ -48,17 +45,16 @@ defmodule Messenger.AiProfiles.AiProfile do
         :context_length,
         :max_completion_tokens,
         :prompt_id,
-        :ai_model_id,
         :purpose,
         :metadata
       ])
 
-      |> validate_required([:name, :prompt_id, :ai_model_id, :purpose])
+      |> validate_required([:name, :prompt_id, :purpose])
       |> validate_length(:name, min: 1, max: 50)
       |> validate_length(:display_description, min: 1, max: 1000)
       |> validate_inclusion(:tier, ["free", "premium", "ultimate", "personal"])
       |> validate_inclusion(:purpose, [
-        "system_prompt",
+        "public_chats",
         "naming",
         "summary",
         "embedding",

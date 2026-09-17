@@ -5,31 +5,13 @@ defmodule Messenger.AiProfiles do
   alias Messenger.AiProfiles.Prompt
   alias Messenger.AiProfiles.AiModel
 
-  # Подгружаем спсок всех профилей доступных для пользователей
-  def available_user_profiles() do
+  # Достаем дефолтный профиль доступный для пользователя по его "status"
+  def get_default_user_ai_profile(user_status) do
     AiProfile
-    |> where(is_active: true, is_public: true)
-    |> preload([:ai_model])
-    |> Repo.all()
-  end
-
-  # Подгружаем спсок профилей доступных для пользователя по его "status"
-  def available_user_profiles(user_status) do
-    AiProfile
-    |> where(is_active: true, is_public: true)
+    |> where(is_active: true, is_public: true, is_default: true)
     |> where(tier: ^user_status)
-    |> preload([:ai_model, :prompt])
-    |> Repo.all()
-  end
-
-  # Достаем профиль по умолчанию для чата пользователя соглано тарифного плана по его "status"
-  def get_default_chat_user_ai_profile(user_status) do
-    AiProfile
-    |> where(is_active: true, is_public: true)
-    |> where(tier: ^user_status)
-    |> where(is_default: true)
-    |> where(purpose: "system_prompt")
-    |> preload([:ai_model, :prompt])
+    |> where(purpose: "public_chats")
+    |> preload([:prompt])
     |> Repo.one()
   end
 
@@ -40,7 +22,7 @@ defmodule Messenger.AiProfiles do
     |> where(tier: ^user_status)
     |> where(is_default: true)
     |> where(purpose: ^purpose)
-    |> preload([:ai_model, :prompt])
+    |> preload([:prompt])
     |> Repo.one()
   end
 
@@ -48,8 +30,35 @@ defmodule Messenger.AiProfiles do
   def get_ai_profile(ai_profile_id) do
     AiProfile
     |> where(id: ^ai_profile_id)
-    |> preload([:ai_model, :prompt])
+    |> preload([:prompt])
     |> Repo.one()
+  end
+
+  # Достаем дефолтную модель доступную для пользователя по его "status"
+  def get_default_user_ai_model(user_status) do
+    AiModel
+      |> where(tier: ^user_status, is_default: true, is_active: true)
+      |> Repo.one()
+  end
+
+  # Достаем все доступные модели для пользователя по его "status"
+  def get_available_user_ai_models(user_status) do
+    AiModel
+      |> where(tier: ^user_status, is_active: true)
+      |> Repo.all()
+  end
+
+  def get_all_users_ai_models do
+    AiModel
+    |> where(is_active: true)
+    |> Repo.all()
+  end
+
+  # Достаем конкретную модель по ID
+  def get_ai_model(ai_model_id) do
+    AiModel
+      |> where(id: ^ai_model_id)
+      |> Repo.one()
   end
 
 end

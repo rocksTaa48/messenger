@@ -3,7 +3,7 @@ defmodule Messenger.Chats.ChatsAgent do
 
   use GenServer
 
-  @idle_timeout :timer.minutes(15) # Таймаут простоя, после которого агент завершает работу
+  @idle_timeout :timer.minutes(15)
 
   # --- Публичный API ---
 
@@ -11,15 +11,19 @@ defmodule Messenger.Chats.ChatsAgent do
     GenServer.start_link(__MODULE__, chat_id, name: via_tuple(chat_id))
   end
 
-  # Запуск процесса (если не запущен) и отправка сообщения в очередь
-  def start_and_process(user_id, chat_id, ai_profile, context) do
-    ensure_started(chat_id)
-    send_message(user_id, chat_id, ai_profile, context)
+  def start_and_process(user_id, chat_id, model, profile, context) do
+    case ensure_started(chat_id) do
+      :ok ->
+        send_message(user_id, chat_id, model, profile, context)
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
-  # Постановка сообщения в очередь GenServer
-  def send_message(user_id, chat_id, ai_profile, context) do
-    GenServer.cast(via_tuple(chat_id), {:process, user_id, ai_profile, context})
+  def send_message(user_id, chat_id, model, profile, context) do
+    GenServer.cast(via_tuple(chat_id), {:process, user_id, model, profile, context})
   end
 
   defp via_tuple(chat_id), do: {:via, Registry, {Messenger.AgentRegistry, chat_id}}
@@ -32,8 +36,8 @@ defmodule Messenger.Chats.ChatsAgent do
   end
 
   @impl true
-  def handle_cast({:process, user_id, ai_profile, context}, state) do
-    new_queue = :queue.in({user_id, ai_profile, context}, state.queue)
+  def handle_cast({:process, user_id, model, profile, context}, state) do
+    new_queue = :queue.in({user_id, model, profile, context}, state.queue)
 
     new_state =
       if state.processing do
@@ -41,7 +45,7 @@ defmodule Messenger.Chats.ChatsAgent do
         %{state | queue: new_queue}
       else
         IO.inspect("🚀 Запускаем обработку из очереди")
-        process_next_message(%{state | queue: new_queue, processing: true})
+        process_next_message(%{state | queue: new_queue})
       end
 
     {:noreply, new_state, @idle_timeout}
@@ -49,8 +53,9 @@ defmodule Messenger.Chats.ChatsAgent do
 
   @impl true
   def handle_cast(:next, state) do
-    # Сигнал от Task, что текущий запрос завершен (успешно или с ошибкой)
-    {:noreply, process_next_message(%{state | processing: false}), @idle_timeout}
+    # Единственное место, где мы дёргаем очередь.
+    # process_next_message сам выставит processing в true/false по ситуации.
+    {:noreply, process_next_message(state), @idle_timeout}
   end
 
   @impl true
@@ -63,54 +68,66 @@ defmodule Messenger.Chats.ChatsAgent do
     end
   end
 
-  # --- Логика очереди и изоляция в Task ---
+  # --- Логика очереди ---
 
   defp process_next_message(%{queue: queue, chat_id: chat_id} = state) do
     case :queue.out(queue) do
-      {{:value, {user_id, ai_profile, context}}, new_queue} ->
-        # Запускаем асинхронный Task, передавая chat_id из аргументов функции
-        DynamicSupervisor.start_child(
-          Messenger.AiSupervisor,
-          {Task, fn ->
-            try do
-              process_stream(user_id, chat_id, ai_profile, context)
-            rescue
-              e ->
-                IO.inspect(e, label: "💥 Критический сбой при обработке запроса")
-                send_error_to_lobby(user_id, chat_id, "Внутренняя ошибка бэкенда")
-            after
-              # Гарантированно пинаем GenServer взять следующее сообщение из очереди
-              GenServer.cast(via_tuple(chat_id), :next)
-            end
-          end}
-        )
+      {{:value, {user_id, model, profile, context}}, new_queue} ->
+        case DynamicSupervisor.start_child(
+               Messenger.AiSupervisor,
+               {Task, fn ->
+                 try do
+                   process_stream(user_id, chat_id, model, profile, context)
+                 rescue
+                   e ->
+                     IO.inspect(e, label: "💥 Критический сбой при обработке запроса")
+                     send_error_to_lobby(user_id, chat_id, "Внутренняя ошибка бэкенда")
+                 after
+                   GenServer.cast(via_tuple(chat_id), :next)
+                 end
+               end}
+             ) do
+          {:ok, _pid} ->
+            # ✅ ФИКС: явно возвращаем processing в true.
+            # Иначе следующее {:process, ...} запустит параллельный Task.
+            %{state | queue: new_queue, processing: true}
 
-        %{state | queue: new_queue}
+          {:error, reason} ->
+            IO.inspect(reason, label: "💥 Не удалось запустить Task")
+            send_error_to_lobby(user_id, chat_id, "Не удалось запустить обработку")
+            # Пропускаем это сообщение, пробуем следующее.
+            # Важно: не оставляем processing: true, иначе очередь залипнет.
+            process_next_message(%{state | queue: new_queue})
+        end
 
       {:empty, new_queue} ->
         %{state | queue: new_queue, processing: false}
     end
   end
 
-  defp process_stream(user_id, chat_id, ai_profile, context) do
+  # --- Стрим от провайдера ---
+
+  defp process_stream(user_id, chat_id, model, profile, context) do
     url = "https://openrouter.ai/api/v1/chat/completions"
     api_key = Application.get_env(:messenger, :ai_providers)[:openrouter_api_key]
-    system_prompt = ai_profile.prompt.content
+    system_prompt = profile.prompt.content
 
     body = %{
-             model: ai_profile.ai_model.openrouter_model_id,
-             messages: [%{role: "system", content: system_prompt } | context],
-             temperature: ai_profile.temperature,
-             top_p: ai_profile.top_p,
-             frequency_penalty: ai_profile.frequency_penalty,
-             presence_penalty: ai_profile.presence_penalty,
-             max_tokens: ai_profile.max_completion_tokens,
+             model: model.openrouter_model_id,
+             messages: [%{role: "system", content: system_prompt} | context],
+             temperature: profile.temperature,
+             top_p: profile.top_p,
+             frequency_penalty: profile.frequency_penalty,
+             presence_penalty: profile.presence_penalty,
+             max_tokens: profile.max_completion_tokens,
              stream: true,
              stream_options: %{include_usage: true}
            }
            |> Enum.filter(fn {_k, v} -> not is_nil(v) end)
            |> Enum.into(%{})
 
+    # ВАЖНО: эти ключи живут только внутри Task-процесса.
+    # Если process_stream когда-нибудь вызовется НЕ внутри Task — утекут в родительский процесс.
     Process.put(:sse_buffer, "")
     Process.put(:full_content, "")
     Process.put(:final_usage, nil)
@@ -132,8 +149,9 @@ defmodule Messenger.Chats.ChatsAgent do
             {events, rest} = Enum.split(parts, -1)
             Process.put(:sse_buffer, List.first(rest) || "")
 
-            Enum.each(events, &process_sse_event(&1, user_id, chat_id))
+            Enum.each(events, &process_sse_event(&1, user_id, chat_id, model))
             {:cont, {req, resp}}
+
           _, {req, resp} ->
             {:cont, {req, resp}}
         end
@@ -151,6 +169,7 @@ defmodule Messenger.Chats.ChatsAgent do
 
       case Chats.create_assistant_message(%{
         chat_id: chat_id,
+        ai_model_id: model.id,
         content: full_content,
         role: "assistant",
         tokens_prompt: usage["prompt_tokens"],
@@ -160,21 +179,21 @@ defmodule Messenger.Chats.ChatsAgent do
         cost_completion: cost_details["upstream_inference_completions_cost"],
         cost_total: usage["cost"]
       }) do
-          {:ok, %{message: inserted_message, chat: chat}} ->
-            Phoenix.PubSub.broadcast(
-              Messenger.PubSub,
-              "user:#{user_id}:lobby",
-              {:ai_stream_done, %{
-                chat_id: chat_id,
-                message_id: inserted_message.id,
-                content: full_content,
-                last_message: full_content |> String.slice(0, 100)
-              }}
-            )
+        {:ok, %{message: inserted_message}} ->
+          Phoenix.PubSub.broadcast(
+            Messenger.PubSub,
+            "user:#{user_id}:lobby",
+            {:ai_stream_done, %{
+              chat_id: chat_id,
+              message_id: inserted_message.id,
+              ai_model_id: inserted_message.ai_model_id,
+              content: full_content,
+              last_message: full_content |> String.slice(0, 100)
+            }}
+          )
 
         {:error, reason} ->
           IO.inspect(reason, label: "DB Save Error")
-          # Даже если не сохранили, сообщаем о завершении (но без id)
           Phoenix.PubSub.broadcast(
             Messenger.PubSub,
             "user:#{user_id}:lobby",
@@ -187,14 +206,13 @@ defmodule Messenger.Chats.ChatsAgent do
         IO.inspect(e, label: "OpenRouter streaming error")
         send_error_to_lobby(user_id, chat_id, "Ошибка получения ответа")
     after
-      # Всегда очищаем process dictionary
       Process.delete(:sse_buffer)
       Process.delete(:full_content)
       Process.delete(:final_usage)
     end
   end
 
-  defp process_sse_event(event, user_id, chat_id) do
+  defp process_sse_event(event, user_id, chat_id, model) do
     event = String.trim(event)
 
     cond do
@@ -203,7 +221,6 @@ defmodule Messenger.Chats.ChatsAgent do
 
         case Jason.decode(data) do
           {:ok, json} ->
-            # Обработка usage (обычно в последнем чанке)
             if usage = json["usage"] do
               Process.put(:final_usage, %{
                 prompt_tokens: usage["prompt_tokens"],
@@ -214,25 +231,26 @@ defmodule Messenger.Chats.ChatsAgent do
               })
             end
 
-            # Извлечение токена
             choices = json["choices"] || []
+
             case choices do
               [%{"delta" => %{"content" => content}} | _] when is_binary(content) ->
                 current = Process.get(:full_content) || ""
                 new_content = current <> content
                 Process.put(:full_content, new_content)
 
-                # Трансляция токена в канал
                 Phoenix.PubSub.broadcast(
                   Messenger.PubSub,
                   "user:#{user_id}:lobby",
-                  {:ai_token, %{chat_id: to_string(chat_id), token: content}}
+                  {:ai_token, %{chat_id: to_string(chat_id), ai_model_id: model.id, token: content}}
                 )
+
               _ ->
                 :ok
             end
 
-          {:error, _} -> :ok
+          {:error, _} ->
+            :ok
         end
 
       event == "data: [DONE]" ->
@@ -251,14 +269,26 @@ defmodule Messenger.Chats.ChatsAgent do
     )
   end
 
-  # --- Вспомогательный запуск супервизора ---
+  # --- Запуск процесса чата ---
 
   defp ensure_started(chat_id) do
     case Registry.lookup(Messenger.AgentRegistry, chat_id) do
-      [{_pid, _}] -> :ok
-      [] ->
-        DynamicSupervisor.start_child(Messenger.AiSupervisor, {__MODULE__, chat_id})
+      [{_pid, _}] ->
         :ok
+
+      [] ->
+        case DynamicSupervisor.start_child(Messenger.AiSupervisor, {__MODULE__, chat_id}) do
+          {:ok, _pid} ->
+            :ok
+
+          {:error, {:already_started, _pid}} ->
+            # Параллельный вызов успел раньше — это нормально.
+            :ok
+
+          {:error, reason} ->
+            IO.inspect(reason, label: "💥 Не удалось запустить ChatsAgent")
+            {:error, reason}
+        end
     end
   end
 end

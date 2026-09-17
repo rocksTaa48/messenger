@@ -4,7 +4,6 @@ defmodule Messenger.AiProfiles.AiModel do
 
   schema "ai_models" do
     field :provider, :string
-    field :icon, :string, default: ""
     field :model_name, :string
     field :openrouter_model_id, :string
     field :is_active, :boolean, default: false
@@ -13,7 +12,15 @@ defmodule Messenger.AiProfiles.AiModel do
     field :cost_currency, :string
     field :cost_updated_at, :string
     field :config, :map, default: %{}
-    has_many :ai_profiles, Messenger.AiProfiles.AiProfile
+    field :tier, :string, default: "free" # "free" | "premium" | "enterprise"
+    field :is_default, :boolean, default: false
+    field :display_name, :string        # Например "GPT-4o Mini"
+    field :display_description, :string   # Можно добавить что то вроде "Быстрая и дешевая модель для генерации текстов"
+    field :display_icon, :string        # Линк на иконку или название в паршале иконок
+
+    has_many :messages, Messenger.Chats.Message
+    has_many :chats, Messenger.Chats.Chat
+    has_many :users, Messenger.Accounts.User
 
     timestamps(type: :utc_datetime)
   end
@@ -23,7 +30,11 @@ defmodule Messenger.AiProfiles.AiModel do
     ai_model
     |> cast(attrs, [
       :provider,
-      :icon,
+      :display_icon,
+      :display_name,
+      :display_description,
+      :tier,
+      :is_default,
       :model_name,
       :openrouter_model_id,
       :is_active,
@@ -32,7 +43,7 @@ defmodule Messenger.AiProfiles.AiModel do
       :cost_currency,
       :cost_updated_at,
       :config])
-    |> validate_required([:model_name, :openrouter_model_id, :is_active])
+    |> validate_required([:model_name, :openrouter_model_id, :is_active, :tier])
     |> unique_constraint([:provider, :model_name], name: :ai_models_provider_model_name_index)
 
   end

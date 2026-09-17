@@ -24,10 +24,8 @@ defmodule MessengerWeb.SessionChannel do
 
     # Базовые данные, нужные всегда, такие как - профиль, группы, список профилей ИИ, может еще чего.
     groups = Chats.list_user_groups(current_user.id)
-    ai_profiles = AiProfiles.available_user_profiles(current_user.status)
 
     formatted_groups = Enum.map(groups, &Serializer.group_serialize/1)
-    formatted_profiles = Enum.map(ai_profiles, &Serializer.ai_profile_serialize/1)
 
     # Подписываемся на изменения обязательно!
     Phoenix.PubSub.subscribe(Messenger.PubSub, "user:#{current_user.id}:lobby")
@@ -43,7 +41,6 @@ defmodule MessengerWeb.SessionChannel do
         "role" => current_user.role
       },
       "groups" => formatted_groups,
-      "ai_profiles" => formatted_profiles,
       "settings" => %{"theme" => "dark", "lang" => "ru"} # если нужно
     }
 
@@ -68,9 +65,12 @@ defmodule MessengerWeb.SessionChannel do
 
     chats = Chats.list_user_chats(user_id, options: options)
     formatted_chats = Enum.map(chats, &Serializer.chat_serialize/1)
+    ai_models = AiProfiles.get_all_users_ai_models
+    formatted_models = Enum.map(ai_models, &Serializer.ai_model_serialize/1)
 
     base_state
     |> Map.put("chats_list", formatted_chats)
+    |> Map.put("ai_models", formatted_models)
     |> Map.put("has_more_chats", length(formatted_chats) >= 15)
     |> Map.put("active_chat", nil)
   end
@@ -91,6 +91,7 @@ defmodule MessengerWeb.SessionChannel do
     |> Map.put("active_chat", %{
       "id" => chat_id,
       "group_id" => chat.group_id,
+      "ai_model_id" => chat.ai_model_id,
       "messages" => active_chat_data,
       "has_more_messages" => length(active_chat_data) >= 15
     })
@@ -133,7 +134,7 @@ defmodule MessengerWeb.SessionChannel do
 
   # 1. Пушим событие на фронтенд.
   @impl true
-  def handle_info({:ai_token, %{chat_id: chat_id, token: token} = payload}, socket) do
+  def handle_info({:ai_token, %{chat_id: chat_id, token: token, ai_model_id: ai_model_id} = payload}, socket) do
     # Отправляем токен на фронтенд
     push(socket, "ai:token", payload)
     {:noreply, socket}

@@ -182,10 +182,10 @@ defmodule Messenger.Chats do
   """
   def get_messages_each_summary(chat_id, chat_summarized_up_to_message_id) do
     last_id = chat_summarized_up_to_message_id || 0
-    count = Message
-            |> where(chat_id: ^chat_id)
-            |> where([m], m.id > ^last_id)
-            |> Repo.aggregate(:count, :id)
+    Message
+      |> where(chat_id: ^chat_id)
+      |> where([m], m.id > ^last_id)
+      |> Repo.aggregate(:count, :id)
   end
 
   def get_messages_for_summary(chat_id, chat_summarized_up_to_message_id, chat_summary) do
@@ -227,15 +227,15 @@ defmodule Messenger.Chats do
   @doc"""
   Функция Инициализирующая первое создание чата, запись в БД как Чата так и первое его сообщение с пометкой 'system'
   """
-  def first_time_create_chat_and_message(user_id, ai_profile_id, model_name, content) do
+  def first_time_create_chat_and_message(user_id, content, model_id, overrides \\ %{}) do
     last_message = content |> String.slice(0, 100)
     Multi.new()
       # 1: Создаем чат со всеми обязательными полями
     |> Multi.insert(:chat, Chat.changeset(%Chat{}, %{
       "user_id" => user_id,
-      "ai_profile_id" => String.to_integer(to_string(ai_profile_id)),
-      "model_name" => model_name,
-      "last_message" => last_message
+      "ai_model_id" => String.to_integer(to_string(model_id)),
+      "last_message" => last_message,
+      "profile_overrides" => overrides
     }))
 
      # 2: Собственно сообщение от пользователя
@@ -243,6 +243,7 @@ defmodule Messenger.Chats do
       Message.changeset(%Message{}, %{
         "chat_id" => chat.id,
         "content" => content,
+        "ai_model_id" => String.to_integer(to_string(model_id)),
         "role" => "user"
       })
     end)
@@ -355,9 +356,10 @@ defmodule Messenger.Chats do
   @doc"""
   ----------------------------------------Это участок работы с сообщениями (messages)-------------------------------
   """
-  def create_message(chat_id, content) do
+  def create_message(chat_id, ai_model_id, content) do
     Message.changeset(%Message{}, %{
       "chat_id" => String.to_integer(to_string(chat_id)),
+      "ai_model_id" => String.to_integer(to_string(ai_model_id)),
       "content" => content,
       "role" => "user"
     })
@@ -366,6 +368,7 @@ defmodule Messenger.Chats do
 
   def create_assistant_message(%{
     chat_id: chat_id,
+    ai_model_id: ai_model_id,
     content: content,
     role: role,
     tokens_prompt: tokens_prompt,
@@ -379,6 +382,7 @@ defmodule Messenger.Chats do
     Multi.new()
     |> Multi.insert(:message, Message.changeset(%Message{}, %{
       "chat_id" => String.to_integer(to_string(chat_id)),
+      "ai_model_id" => String.to_integer(to_string(ai_model_id)),
       "content" => content || "",
       "role" => role,
       "tokens_prompt" => tokens_prompt || 0,
@@ -387,11 +391,11 @@ defmodule Messenger.Chats do
       "cost_prompt" => cost_prompt,
       "cost_completion" => cost_completion,
       "cost_total" => cost_total
-
     }))
 
-    |> Multi.update(:chat, Chat.changeset_for_update_last_message(%Chat{id: chat_id}, %{
-      "last_message" => last_message
+    |> Multi.update(:chat, Chat.changeset_for_update_last_message_or_model(%Chat{id: chat_id}, %{
+      "last_message" => last_message,
+      "ai_model_id" => String.to_integer(to_string(ai_model_id)),
     }))
 
     |> Repo.transaction()

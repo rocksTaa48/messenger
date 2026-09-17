@@ -20,44 +20,91 @@ export interface AppState {
     nav_history: NavigationNode[];                        // Стек пройденных экранов
 
     // Данные от бэкенда
-    user: { id: number; username: string; role: string; status: string; } | null;
-    ai_model: { id: string; model_name: string; provider: string; };
+    user: {
+        id: number;
+        username: string;
+        role: string;
+        status: string;
+        ai_model_id: string;
+        profile_overrides?: {
+            temperature?: number | string;
+            top_p?: number | string;
+            presence_penalty?: number | string;
+            frequency_penalty?: number | string;
+        };
+    } | null;
+
+    ai_model: {
+        id: string;
+        provider: string;
+        model_name: string;
+        display_name: string;
+        display_description: string;
+        display_icon: string;
+        tier: string;
+    } | null;
+
+    profile_overrides?: {
+        temperature?: number | string;
+        top_p?: number | string;
+        presence_penalty?: number | string;
+        frequency_penalty?: number | string;
+    } | null;
+
+    ai_models: AppState['ai_model'];
+
     ai_profile: {
         id: string;
         name: string;
         tier: string;
         display_name: string;
         display_description: string;
-        model: AppState['ai_model'];
-    };
+        temperature: string;
+        top_p: string;
+        frequency_penalty: string;
+        presence_penalty: string;
+    } | null;
+
     chats_list: Array<{
         id: string;
         title: string;
-        unread: number;
-        ai_profile_id: string;
+        unread?: number;
+        group_id: number | null;
+        ai_model_id: string;
         is_pinned: boolean;
         last_message: string;
+        cursor_timestamp: string;
+        profile_overrides?: {
+            temperature?: number | string;
+            top_p?: number | string;
+            presence_penalty?: number | string;
+            frequency_penalty?: number | string;
+        };
     }>;
-    ai_profiles: Array<{
-        id: string;
-        name: string;
-        tier: string;
-        display_name: string;
-        display_description: string;
-        model: AppState['ai_model'];
-    }>;
+
     groups: Array<{ id: string; title: string }>;
-    active_chat: { id: string; title: string; ai_profile: AppState['ai_profile'];
-        messages: Array<{
-            id: number;
-            content: string;
-            role: string;
-            created_at: string;
-            is_streaming?: boolean; // Ответ все еще стримится или уже нет.
-        }>;
-        has_more_messages?: boolean;
-    } | null;
+
+    active_chat:
+        { id: string; title: string; ai_model_id: string;
+            profile_overrides?: {
+                temperature?: number | string;
+                top_p?: number | string;
+                presence_penalty?: number | string;
+                frequency_penalty?: number | string;
+            };
+            messages: Array<{
+                id: number;
+                content: string;
+                role: string;
+                created_at: string;
+                ai_model_id: string;
+                is_streaming?: boolean; // Ответ все еще стримится или уже нет.
+            }>;
+            has_more_messages?: boolean;
+        } | null;
+
     has_more_chats: boolean;
+
     settings: { theme: string; lang: string };
 }
 
@@ -67,8 +114,9 @@ const initialValue: AppState = {
     nav_context: { screen: 'chats' }, // Стартуем всегда с лобби чатов
     nav_history: [],
     user: null,
-    ai_profiles: [],
     ai_model: null,
+    ai_models: [],
+    ai_profile: null,
     chats_list: [],
     groups: [],
     active_chat: null,
@@ -145,7 +193,7 @@ export const appState = {
 
         // УЧАСТОК: Обработка токенов в чат ------------------------------>
         // 1. Обработка потока токенов
-        channel.on('ai:token', (payload: { chat_id: string; token: string }) => {
+        channel.on('ai:token', (payload: { chat_id: string; token: string, ai_model_id: string }) => {
             update(state => {
                 if (!state.active_chat) return state;
 
@@ -163,6 +211,7 @@ export const appState = {
                     messages.push({
                         id: -Date.now(),
                         role: 'assistant',
+                        ai_model_id: payload.ai_model_id || '',
                         content: payload.token || '',
                         created_at: new Date().toISOString(),
                         is_streaming: true
@@ -181,6 +230,7 @@ export const appState = {
             chat_id: string;
             message_id?: number;
             content?: string;
+            ai_model_id?: string;
             last_message?: string;
         }) => {
             update(state => {
@@ -204,6 +254,7 @@ export const appState = {
                                     ...msg,
                                     id: payload.message_id || msg.id,
                                     content: payload.content || msg.content,
+                                    ai_model_id: payload.ai_model_id,
                                     is_streaming: false
                                 };
                             }
@@ -281,7 +332,11 @@ export const appState = {
     },
 
     // УЧАСТОК: Добавление сообщения в чат ------------------------------------> Оптимистичная отправка сообщения
-    sendMessage(text: string, aiProfileId: string | null = null) {
+    sendMessage(
+        text: string,
+        aiModelId: string | null = null,
+        profileOverrides?: { temperature: number, topP: number, frequencyPenalty: number, presencePenalty: number }
+    ) {
         if (!text.trim()) return;
 
         const tempId = `temp-${Date.now()}`;
@@ -314,18 +369,39 @@ export const appState = {
             };
         });
 
-        // 2. Шлём на бэк. ai_profile_id уходит ТОЛЬКО когда чата нет
+        const overrides = profileOverrides
+            ? {
+                temperature: profileOverrides.temperature,
+                top_p: profileOverrides.topP,
+                frequency_penalty: profileOverrides.frequencyPenalty,
+                presence_penalty: profileOverrides.presencePenalty,
+            }
+            : undefined;
+
+        // 2. Шлём на бэк
         const pushRequest = this.send("chat:click_submit_message", {
             chat_id: currentChatId,
             text: text,
             temp_id: tempId,
-            ...(currentChatId ? {} : { ai_profile_id: Number(aiProfileId) })
+            ...(currentChatId ? {} : {
+                ai_model_id: aiModelId ? Number(aiModelId) : undefined,
+                profile_overrides: overrides,
+            })
         });
 
         if (!pushRequest) return;
 
-        // 3. OK — подменяем временный ID на реальный
-        pushRequest.receive('ok', (payload: { chat_id: string; message_id: number }) => {
+        pushRequest.receive('ok', (payload: {
+            chat_id: string;
+            message_id: number;
+            ai_model_id: string;
+            profile_overrides?: {
+                temperature?: number | string;
+                top_p?: number | string;
+                presence_penalty?: number | string;
+                frequency_penalty?: number | string;
+            } | null;
+        }) => {
             update(state => {
                 if (!state.active_chat) return state;
 
@@ -338,22 +414,10 @@ export const appState = {
                     active_chat: {
                         ...state.active_chat,
                         id: payload.chat_id,
-                        messages
-                    }
-                };
-            });
-        });
-
-        // 4. Ошибка — удаляем временное сообщение
-        pushRequest.receive('error', () => {
-            update(state => {
-                if (!state.active_chat) return state;
-                return {
-                    ...state,
-                    active_chat: {
-                        ...state.active_chat,
-                        messages: state.active_chat.messages.filter(m => m.id !== tempId)
-                    }
+                        ai_model_id: payload.ai_model_id,
+                        messages,
+                        profile_overrides: payload.profile_overrides ?? state.active_chat.profile_overrides,
+                    },
                 };
             });
         });
@@ -361,9 +425,10 @@ export const appState = {
 
     send(event: string, payload: object = {}) {
         if (channel) {
-            channel.push(event, payload);
+            return channel.push(event, payload);
         } else {
             console.warn(`Не могу отправить ${event}, канал еще не готов.`);
+            return null;
         }
     },
 
