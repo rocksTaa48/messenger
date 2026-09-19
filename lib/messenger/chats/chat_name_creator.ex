@@ -36,12 +36,13 @@ defmodule Messenger.Chats.ChatNameCreator do
            ]
          ) do
       {:ok, %Req.Response{status: 200, body: %{"choices" => [%{"message" => %{"content" => content}}]}}} ->
-        {:ok, _} = Chats.update_chat( chat_id, user_id, %{ title: content })
+        safe_title = String.slice(content, 0, 99) # <---- Режем на всякий случай что бы экто не упал
+        {:ok, _} = Chats.update_chat( chat_id, user_id, %{ title: safe_title })
 
         Phoenix.PubSub.broadcast(
           Messenger.PubSub,
           "user:#{user_id}:lobby",
-          {:chat_title_update, %{chat_id: chat_id, title: content}}
+          {:chat_title_update, %{chat_id: chat_id, title: safe_title}}
         )
 
       {:ok, %Req.Response{status: status, body: body}} ->

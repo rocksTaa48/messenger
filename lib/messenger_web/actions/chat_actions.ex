@@ -117,6 +117,7 @@ defmodule MessengerWeb.Actions.ChatActions do
     content = Map.get(payload, "text")
     current_user = socket.assigns.current_user
     ai_models = AiProfiles.get_all_users_ai_models()
+    temp_id = Map.get(payload, "temp_id")
     chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
 
     action =
@@ -124,12 +125,12 @@ defmodule MessengerWeb.Actions.ChatActions do
         nil ->
           case build_ai_profile(current_user, chat, payload) do
             {:ok, %{model: model, profile: profile}} ->
-              create_chat_and_first_message(current_user, model, profile, content)
+              create_chat_and_first_message(current_user, model, profile, content, temp_id)
           end
         existing_chat ->
           case build_ai_profile(current_user, chat) do
             {:ok, %{model: model, profile: profile}} ->
-              create_message_in_existing_chat(current_user, model, profile, existing_chat, content)
+              create_message_in_existing_chat(current_user, model, profile, existing_chat, content, temp_id)
           end
       end
 
@@ -147,6 +148,24 @@ defmodule MessengerWeb.Actions.ChatActions do
       {:error, _reason} ->
         {:reply, {:error, %{reason: "failed_to_process_message"}}, socket}
     end
+  end
+
+  @doc"""
+  ABORTED_MESSAGE:    Функция останавливает генерацию ответа AI
+  """
+  def handle_in("click_stop_streaming", payload, socket) do
+    current_user = socket.assigns.current_user
+    chat_id = Map.get(payload, "chat_id")
+    ai_models = AiProfiles.get_all_users_ai_models()
+    chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
+    action =
+      case chat do
+        nil ->
+          {:reply, {:error, %{reason: "failed_to_process_message"}}, socket}
+        existing_chat ->
+          Chats.ChatsAgent.stop_generation(chat.id)
+      end
+    {:reply, :ok, socket}
   end
 
   @doc"""
@@ -222,7 +241,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   @doc"""
   HELPER create_chat_and_first_message: Создает сообщение в первый раз, вместе с чатом и настройками из payload
   """
-  defp create_chat_and_first_message(user, model, profile, content) do
+  defp create_chat_and_first_message(user, model, profile, content, temp_id) do
 
     naming_ai_profile =  AiProfiles.get_default_system_user_ai_profile(user.status, "naming")
     serialized_profile = Serializer.profile_for_api_serialize(profile)
@@ -233,7 +252,7 @@ defmodule MessengerWeb.Actions.ChatActions do
 
       {:ok, %{chat: chat, message: message}} ->
         context = Chats.get_ai_context(chat.id)
-        Chats.ChatsAgent.start_and_process(user.id, chat.id, model, serialized_profile, context)
+        Chats.ChatsAgent.start_and_process(user.id, chat.id, model, serialized_profile, context, temp_id)
         Chats.ChatNameCreator.start_generation(user.id, chat.id, model, naming_ai_profile, content)
         {:ok, chat, message}
       {:error, _failed_step, _failed_value, _changesets} ->
@@ -244,12 +263,12 @@ defmodule MessengerWeb.Actions.ChatActions do
   @doc"""
   HELPER create_message_in_existing_chat: Создает сообщение уже в существующем чате, настройки подтягиваются из БД
   """
-  defp create_message_in_existing_chat(user, model, profile, chat, content) do
+  defp create_message_in_existing_chat(user, model, profile, chat, content, temp_id) do
     case Chats.create_message(chat.id, model.id, content) do
       {:ok, message} ->
         context = Chats.get_ai_context(chat.id)
         serialized_profile = Serializer.profile_for_api_serialize(profile)
-        Chats.ChatsAgent.start_and_process(user.id, chat.id, model, serialized_profile, context)
+        Chats.ChatsAgent.start_and_process(user.id, chat.id, model, serialized_profile, context, temp_id)
         start_summary(user, model, chat)
         {:ok, chat, message}
       {:error, _changeset} ->

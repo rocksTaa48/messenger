@@ -1,10 +1,10 @@
 <script lang="ts">
     import { onMount, tick, beforeUpdate, afterUpdate } from 'svelte';
-    import { ChevronLeft, Paperclip, Mic, SendHorizontal, Settings, FileImage } from 'lucide-svelte';
+    import { ChevronLeft, Paperclip, Mic, SendHorizontal, Loader2, Square, Settings, FileImage } from 'lucide-svelte';
     import { appState } from '../../stores/socketStore';
     import Message from "./partials/Message.svelte";
     import ChatSettingsModal from './ChatSettingsModal.svelte';
-    import WebApp from "@twa-dev/sdk"; // Не забудь импортировать, если используешь HapticFeedback
+    import WebApp from "@twa-dev/sdk";
 
     let isChatSettingsOpen = false;
 
@@ -17,7 +17,7 @@
         presencePenalty: number;
     } | null = null;
 
-    // Реактивные значения: приоритет у pending, затем у активного чата, затем дефолт
+    // Реактивные значения: у pending, затем у активного чата, затем дефолт
     $: currentAiModelId = pendingAiModelId || $appState.active_chat?.ai_model_id || $appState.ai_model?.id || null;
 
     $: currentTemperature = pendingOverrides?.temperature ?? $appState.active_chat?.profile_overrides?.temperature ?? $appState.profile_overrides?.temperature ?? 0.7;
@@ -58,13 +58,15 @@
         isChatSettingsOpen = false;
     }
 
-    // === Реактивные данные из стора ===
+    // =================================== Реактивные данные из стора ==================================================
     $: activeChat = $appState?.active_chat;
     $: messages = activeChat?.messages || [];
     $: isGenerating = messages.some(msg => msg.is_streaming === true) || false;
     $: lastStreamingAssistant = [...messages].reverse().find(
         m => m.role === 'assistant' && m.is_streaming === true
     );
+
+    $: isAwaitingFirstToken = !!activeChat?.awaiting_response;
 
     $: isThink = !!lastStreamingAssistant && (lastStreamingAssistant.content || '').trim().length === 0;
     $: isTyping = !!lastStreamingAssistant && (lastStreamingAssistant.content || '').trim().length > 0;
@@ -76,7 +78,7 @@
     $: isThinking = messages.length > 0 && !activeChat?.title && !currentChatInfo?.title;
     $: chatName = activeChat?.title || currentChatInfo?.title || (isThinking ? "Придумываю название" : (activeChat ? "Новый чат" : "Ассистент"));
 
-    // === DOM-рефы ===
+    // === Рефы ===
     let scrollContainer: HTMLDivElement;
     let textareaElement: HTMLTextAreaElement;
     let topSentinel: HTMLDivElement;
@@ -177,10 +179,17 @@
         if (!isLoadingMoreMessages && messages.length > prevMessagesCount && messages[messages.length - 1]?.id !== prevLastId && isNearBottom) {
             scrollToBottomImmediate();
         }
+
+        const lastMsg = messages[messages.length - 1];
+        if (lastMsg?.error && isNearBottom) {
+            scrollToBottomImmediate();
+            return;
+        }
     });
 
     $: if (newMessageText.trim().length > 0) { isAttachmentMenuOpen = false; }
 
+    // ================================================= Отправка сообщения ============================================
     function handleSend() {
         const text = newMessageText.trim();
         if (!text) return;
@@ -206,9 +215,24 @@
         scrollToBottom();
     }
 
+    // ================================================= Стоп генерации модели =========================================
+
+    function handleStop() {
+        const chatId = $appState.active_chat?.id;
+
+        if (!chatId || !isGenerating) return;
+
+        if (WebApp.HapticFeedback) {
+            WebApp.HapticFeedback.impactOccurred('medium');
+        }
+
+        appState.stopGeneration(chatId);
+    }
+
     function handleKeyDown(event: KeyboardEvent) {
         if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
+            if (isGenerating) return;
             handleSend();
         }
     }
@@ -333,12 +357,29 @@
             ></textarea>
         </div>
 
-        {#if newMessageText.trim().length > 0}
+        {#if isAwaitingFirstToken}
+            <button
+                    disabled
+                    class="p-2 flex items-center justify-center flex-shrink-0 text-gray-500 cursor-not-allowed"
+                    title="Ожидание ответа"
+            >
+                <Loader2 size={20} class="animate-spin" />
+            </button>
+        {:else if isGenerating}
+            <button
+                    on:click={handleStop}
+                    class="p-2 flex items-center justify-center flex-shrink-0 transition-all
+            {isTyping ? 'text-red-400 hover:text-red-300 hover:scale-105 active:scale-95' : 'text-gray-500 hover:text-gray-400'}"
+                    title={isTyping ? "Остановить генерацию" : "Отменить запрос"}
+            >
+                <Square size={20} strokeWidth={2.5} fill={isTyping ? "currentColor" : "none"} />
+            </button>
+        {:else if newMessageText.trim().length > 0}
             <button on:click={handleSend} class="text-[#2481cc] hover:scale-105 active:scale-95 transition-all p-2 flex items-center justify-center flex-shrink-0">
                 <SendHorizontal size={20} />
             </button>
         {:else}
-            <button class="text-gray-500 hover:text-white transition-colors p-2 flex-shrink-0">
+            <button class="text-gray-500 p-2 flex-shrink-0 cursor-not-allowed" disabled>
                 <SendHorizontal size={20} />
             </button>
         {/if}

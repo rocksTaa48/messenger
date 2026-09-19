@@ -1,5 +1,6 @@
 defmodule Messenger.Chats.ChatSummaryCreator do
   alias Messenger.Chats
+  require Logger
 
 
   def start_generation(user_id, chat_id, model, ai_profile, %{summary: summary, context: context, last_msg_id: last_msg_id}) do
@@ -36,7 +37,6 @@ defmodule Messenger.Chats.ChatSummaryCreator do
       %{role: "user",   content: user_content}
     ]
 
-
     body = %{
              model: model,
              messages: complete_context,
@@ -48,7 +48,6 @@ defmodule Messenger.Chats.ChatSummaryCreator do
            }
            |> Enum.filter(fn {_k, v} -> not is_nil(v) end)
            |> Enum.into(%{})
-    IO.inspect(complete_context, label: "CONTEXT SUMMARY")
 
     case Req.post(url,
            json: body,
@@ -64,6 +63,7 @@ defmodule Messenger.Chats.ChatSummaryCreator do
         {:ok, _} = Chats.update_chat( chat_id, user_id, %{ summary: content, summarized_up_to_message_id: last_msg_id })
         {:ok, %{chat_id: chat_id, summary: content} }
       {:ok, %Req.Response{status: status, body: body}} ->
+
         Logger.error("Summary AI error #{status}: #{inspect(body)}")
         {:error, {:http_error, status}}
 

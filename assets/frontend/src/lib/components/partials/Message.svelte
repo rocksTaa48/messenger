@@ -80,7 +80,17 @@
             <!-- Бабл с ответом под иконкой, выровнен по левому краю -->
             <div class="w-full px-4 py-2.5 text-xs font-medium border rounded-[20px] relative break-words shadow-md text-left bg-white/[0.03] border-white/5 text-gray-200 rounded-tl-sm">
                 <div class="message-content" on:click={handleContentClick}>
-                    {#if msg.is_streaming}
+                    {#if msg.error && msg.is_aborted}
+                        <!-- Прерывание до получения ответа -->
+                        <p class="leading-relaxed text-yellow-400/80 italic flex items-center gap-2">
+                            <span>😕 Генерация прервана до ответа</span>
+                        </p>
+                    {:else if msg.error}
+                        <!-- Обычная ошибка -->
+                        <p class="leading-relaxed text-red-400/80 italic flex items-center gap-2">
+                            <span>😩 Не удалось получить ответ</span>
+                        </p>
+                    {:else if msg.is_streaming}
                         <p class="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                     {:else}
                         {@html renderMarkdown(msg.content)}
