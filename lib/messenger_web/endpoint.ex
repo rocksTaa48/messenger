@@ -46,7 +46,9 @@ defmodule MessengerWeb.Endpoint do
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
-    json_decoder: Phoenix.json_library()
+    json_decoder: Phoenix.json_library(),
+    length: 10_000_000,          # 10 MB — с запасом под аудио
+    read_timeout: 30_000
 
   plug Plug.MethodOverride
   plug Plug.Head

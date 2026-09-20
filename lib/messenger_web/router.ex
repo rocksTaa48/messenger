@@ -11,7 +11,16 @@ defmodule MessengerWeb.Router do
     plug MessengerWeb.Plugs.FetchCurrentUser
   end
 
+
+
   pipeline :api do
+    plug :accepts, ["json"]
+    plug MessengerWeb.Plugs.FetchTelegramUser
+  end
+
+  scope "/api", MessengerWeb do
+    pipe_through :api
+    post "/upload-audio", TranscriptionController, :upload # Отправка аудиосообщения на бэк
   end
 
   scope "/", MessengerWeb do

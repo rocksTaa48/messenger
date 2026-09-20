@@ -364,7 +364,7 @@ defmodule Messenger.Chats.ChatsAgent do
   """
   defp save_aborted_message(user_id, chat_id, model, full_content, temp_id) do
     estimated_prompt_tokens = Process.get(:estimated_prompt_tokens, 0)
-    estimated_prompt_cost = Process.get(:estimated_prompt_cost, 0,0)
+    estimated_prompt_cost = Process.get(:estimated_prompt_cost, 0.0)
 
     estimated_completion_tokens = ceil(String.length(full_content) / 2) || 0
     completion_tokens_dec = Decimal.new(estimated_completion_tokens) || "0.0"

@@ -174,7 +174,19 @@ defmodule MessengerWeb.SessionChannel do
     {:noreply, socket}
   end
 
-  # 4. Фолбэк от неожиданного сообщения
+  # 6. Пушим расшифровку голосового сообщения.
+  def handle_info({:ai_transcript_done, payload}, socket) do
+    push(socket, "ai:transcript_done", payload)
+    {:noreply, socket}
+  end
+
+  # 7. Ошибка расшифровки голосового.
+  def handle_info({:ai_transcript_error, payload}, socket) do
+    push(socket, "ai:transcript_error", payload)
+    {:noreply, socket}
+  end
+
+  # 0. Фолбэк от неожиданного сообщения
   @impl true
   def handle_info(msg, socket) do
     # Можно оставить просто IO.inspect для отладки, или вообще убрать, если не нужно.

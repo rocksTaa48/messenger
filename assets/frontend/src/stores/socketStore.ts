@@ -101,6 +101,8 @@
                     is_streaming?: boolean; // Ответ все еще стримится или уже нет.
                     error?: boolean;
                     is_aborted?: boolean;
+                    isAudio?: boolean;         // это голосовое сообщение.
+                    isTranscripted?: boolean;  // еще переводится.
                 }>;
                 has_more_messages?: boolean;
             } | null;
@@ -399,6 +401,78 @@
                 // Возвращаем стейт без изменений
                 return state;
             });
+
+            // 4. Успешная транскрибация голосового сообщения
+            channel.on('ai:transcript_done', (payload: {
+                temp_id: string;
+                chat_id: string;
+                message_id: number;
+                text: string;
+                ai_model_id?: string;
+            }) => {
+                update(state => {
+                    if (!state.active_chat) return state;
+
+                    const messages = state.active_chat.messages.map(msg =>
+                        msg.temp_id === payload.temp_id
+                            ? {
+                                ...msg,
+                                id: payload.message_id,
+                                content: payload.text,
+                                ai_model_id: payload.ai_model_id || msg.ai_model_id,
+                                isTranscripted: true,
+                                is_pending: false
+                            }
+                            : msg
+                    );
+
+                    return {
+                        ...state,
+                        active_chat: {
+                            ...state.active_chat,
+                            // Если это был новый чат — фиксируем реальный chat_id,
+                            // чтобы последующие ai:token / ai:stream_done не отфильтровались
+                            id: state.active_chat.id || payload.chat_id,
+                            messages
+                        }
+                    };
+                });
+            });
+
+            // 5. Ошибка транскрибации
+            channel.on('ai:transcript_error', (payload: {
+                temp_id: string;
+                chat_id?: string | null;
+                reason: string;
+            }) => {
+                console.error('[Transcript] error:', payload.reason);
+
+                update(state => {
+                    if (!state.active_chat) return state;
+
+                    const messages = state.active_chat.messages.map(msg =>
+                        msg.temp_id === payload.temp_id
+                            ? {
+                                ...msg,
+                                isTranscripted: true,
+                                is_pending: false,
+                                error: true,
+                                content: ''
+                            }
+                            : msg
+                    );
+
+                    return {
+                        ...state,
+                        active_chat: {
+                            ...state.active_chat,
+                            // Снимаем awaiting, потому что ответа модели не будет
+                            awaiting_response: false,
+                            messages
+                        }
+                    };
+                });
+            });
         },
     
         // УЧАСТОК: Добавление сообщения в чат ------------------------------------> Оптимистичная отправка сообщения
@@ -525,6 +599,104 @@
                 chat_id: chat_id
             });
         },
+
+        // ========================= Отправка голосового сообщения =========================
+        sendVoiceMessage(
+            blob: Blob,
+            aiModelId: string | null = null,
+            profileOverrides?: {
+                temperature: number;
+                topP: number;
+                frequencyPenalty: number;
+                presencePenalty: number;
+            }
+        ) {
+            const tempId = `temp-${Date.now()}`;
+            let currentChatId: string | null = null;
+
+            // 1. Оптимистичный бабл — пустой, с флагом isAudio
+            update(state => {
+                currentChatId = state.active_chat?.id || null;
+
+                const activeChat = state.active_chat || {
+                    id: '',
+                    messages: [],
+                    group_id: state.nav_context.params?.group_id
+                };
+
+                const newMessage = {
+                    id: tempId,
+                    temp_id: tempId,
+                    role: 'user',
+                    content: '',
+                    created_at: new Date().toISOString(),
+                    is_pending: true,
+                    isAudio: true,
+                    isTranscripted: false
+                };
+
+                return {
+                    ...state,
+                    active_chat: {
+                        ...activeChat,
+                        awaiting_response: true,
+                        messages: [...activeChat.messages, newMessage]
+                    }
+                };
+            });
+
+            // 2. FormData — как в рабочем handleSendAudio
+            const initData = window.Telegram?.WebApp?.initData || "";
+
+            const formData = new FormData();
+            formData.append('audio', blob, 'voice.webm');
+            if (currentChatId) formData.append('chat_id', currentChatId);
+            formData.append('temp_id', tempId);
+            if (!currentChatId && aiModelId) formData.append('ai_model_id', aiModelId);
+            if (!currentChatId && profileOverrides) {
+                formData.append('profile_overrides', JSON.stringify({
+                    temperature: profileOverrides.temperature,
+                    top_p: profileOverrides.topP,
+                    frequency_penalty: profileOverrides.frequencyPenalty,
+                    presence_penalty: profileOverrides.presencePenalty
+                }));
+            }
+
+            // 3. Отправка — URL и заголовки как в рабочем методе
+            fetch('/api/upload-audio', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'Authorization': `Bearer ${initData}`
+                }
+            })
+                .then(res => {
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    return res.json();
+                })
+                .catch(err => {
+                    console.error('[sendVoiceMessage] fetch failed:', err);
+                    update(state => {
+                        if (!state.active_chat) return state;
+
+                        const messages = state.active_chat.messages.map(msg =>
+                            msg.temp_id === tempId
+                                ? { ...msg, isTranscripted: true, is_pending: false, error: true }
+                                : msg
+                        );
+
+                        return {
+                            ...state,
+                            active_chat: {
+                                ...state.active_chat,
+                                awaiting_response: false,
+                                messages
+                            }
+                        };
+                    });
+                });
+        },
+
 
         send(event: string, payload: object = {}) {
             if (channel) {
