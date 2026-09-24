@@ -95,9 +95,9 @@ alias Messenger.Chats
   defp handle_successful_transcription(current_user, chat_id, ai_model, temp_id, text) do
     action =
       if is_nil(chat_id) do
-        Chats.ChatsBuilder.create_first_message(current_user, %{"text" => text, "temp_id" => temp_id})
+        Chats.ChatsBuilder.create_first_message(current_user, %{"text" => text, "temp_id" => temp_id, "is_audio" => true})
       else
-        Chats.ChatsBuilder.create_message_in_chat(current_user, %{"text" => text, "chat_id" => chat_id, "temp_id" => temp_id})
+        Chats.ChatsBuilder.create_message_in_chat(current_user, %{"text" => text, "chat_id" => chat_id, "temp_id" => temp_id, "is_audio" => true})
       end
 
     case action do
@@ -109,6 +109,7 @@ alias Messenger.Chats
             temp_id: temp_id,
             chat_id: chat.id,
             message_id: message.id,
+            is_audio: true,
             text: text,
             ai_model_id: ai_model.id
           }}

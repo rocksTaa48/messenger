@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { Copy, Check } from 'lucide-svelte';
+    import {MicVocal, Square, Ban} from 'lucide-svelte';
     import { renderMarkdown } from '../../markdown';
     import Icons from './Icons.svelte';
     import { appState } from '../../../stores/socketStore';
@@ -10,6 +10,8 @@
         content: string;
         created_at: string;
         is_streaming?: boolean;
+        is_audio?: boolean;
+        is_aborted?: boolean;
         ai_model_id: number | string;
     }>;
 
@@ -22,8 +24,6 @@
         const model = aiModels.find(m => String(m.id) === String(modelId));
         return model?.provider || 'default';
     }
-
-    let copiedId: string | number | null = null;
 
     function formatTime(isoString: string): string {
         if (!isoString) return "";
@@ -101,6 +101,11 @@
                     <span class="text-[9px] font-bold opacity-40">
                         {formatTime(msg.created_at)}
                     </span>
+                    {#if msg.is_aborted}
+                        <span class="text-[9px] font-bold opacity-40">
+                            <Ban size={12} strokeWidth={2.5} />
+                        </span>
+                    {/if}
                 </div>
             </div>
         </div>
@@ -117,6 +122,11 @@
                     <span class="text-[9px] font-bold opacity-40">
                         {formatTime(msg.created_at)}
                     </span>
+                    {#if msg.is_audio}
+                        <span class="text-[9px] font-bold opacity-40">
+                            <MicVocal size={12} strokeWidth={2.5} />
+                        </span>
+                    {/if}
                 </div>
             </div>
         </div>

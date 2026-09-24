@@ -13,6 +13,8 @@ defmodule Messenger.Chats.Message do
     field :cost_prompt, :decimal
     field :cost_completion, :decimal
     field :cost_total, :decimal
+    field :is_aborted, :boolean
+    field :is_audio, :boolean
     field :metadata, :map, default: %{}
 
     belongs_to :chat, Messenger.Chats.Chat
@@ -35,6 +37,8 @@ defmodule Messenger.Chats.Message do
       :cost_prompt,
       :cost_completion,
       :cost_total,
+      :is_aborted,
+      :is_audio,
       :metadata])
     |> validate_required([:role, :content, :chat_id, :ai_model_id])
     |> validate_inclusion(:role, ["system", "user", "assistant"])

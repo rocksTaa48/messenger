@@ -101,8 +101,8 @@
                     is_streaming?: boolean; // Ответ все еще стримится или уже нет.
                     error?: boolean;
                     is_aborted?: boolean;
-                    isAudio?: boolean;         // это голосовое сообщение.
-                    isTranscripted?: boolean;  // еще переводится.
+                    is_audio?: boolean;         // это голосовое сообщение.
+                    is_transcripted?: boolean;  // еще переводится.
                 }>;
                 has_more_messages?: boolean;
             } | null;
@@ -420,7 +420,7 @@
                                 id: payload.message_id,
                                 content: payload.text,
                                 ai_model_id: payload.ai_model_id || msg.ai_model_id,
-                                isTranscripted: true,
+                                is_transcripted: true,
                                 is_pending: false
                             }
                             : msg
@@ -454,7 +454,7 @@
                         msg.temp_id === payload.temp_id
                             ? {
                                 ...msg,
-                                isTranscripted: true,
+                                is_transcripted: true,
                                 is_pending: false,
                                 error: true,
                                 content: ''
@@ -631,8 +631,8 @@
                     content: '',
                     created_at: new Date().toISOString(),
                     is_pending: true,
-                    isAudio: true,
-                    isTranscripted: false
+                    is_audio: true,
+                    is_transcripted: false
                 };
 
                 return {
@@ -681,7 +681,7 @@
 
                         const messages = state.active_chat.messages.map(msg =>
                             msg.temp_id === tempId
-                                ? { ...msg, isTranscripted: true, is_pending: false, error: true }
+                                ? { ...msg, is_transcripted: true, is_pending: false, error: true }
                                 : msg
                         );
 

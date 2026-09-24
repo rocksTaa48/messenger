@@ -5,7 +5,7 @@ defmodule Messenger.Chats.ChatsBuilder do
 
   def create_message_in_chat(user, payload) do
     IO.inspect(payload, label: "Это пайлоад который попал в экшен <--------------------------------------------------")
-
+    is_audio = Map.get(payload, "is_audio") || false
     content = Map.get(payload, "text")
     temp_id = Map.get(payload, "temp_id")
     chat_id = Map.get(payload, "chat_id")
@@ -13,17 +13,18 @@ defmodule Messenger.Chats.ChatsBuilder do
 
     case build_ai_profile(user, payload) do
       {:ok, %{model: model, profile: profile}} ->
-        create_message_in_existing_chat(user, model, profile, chat, content, temp_id)
+        create_message_in_existing_chat(user, model, profile, chat, content, temp_id, is_audio)
     end
   end
 
   def create_first_message(user, payload) do
     IO.inspect(payload, label: "Это пайлоад который попал в экшен <--------------------------------------------------")
+    is_audio = Map.get(payload, "is_audio") || false
     content = Map.get(payload, "text")
     temp_id = Map.get(payload, "temp_id")
     case build_ai_profile(user, payload) do
       {:ok, %{model: model, profile: profile}} ->
-        create_chat_and_first_message(user, model, profile, content, temp_id)
+        create_chat_and_first_message(user, model, profile, content, temp_id, is_audio)
     end
   end
 
@@ -102,17 +103,20 @@ defmodule Messenger.Chats.ChatsBuilder do
   @doc"""
   Создает сообщение в первый раз, вместе с чатом и настройками из payload
   """
-  defp create_chat_and_first_message(user, model, profile, content, temp_id) do
+  defp create_chat_and_first_message(user, model, profile, content, temp_id, is_audio) do
     naming_ai_profile =  AiProfiles.get_default_system_user_ai_profile(user.status, "naming")
     serialized_profile = Serializer.profile_for_api_serialize(profile)
     overrides = profile |> Map.take([:temperature, :top_p, :presence_penalty, :frequency_penalty])
+
+    summary = "" # <-------------------------------- ПОПРАВИТЬ! ВРЕМЕННАЯ МЕРА!!!!
     IO.inspect(overrides, label: "<_________________CREATE MESSAGE OVERRIDES INSPECT")
 
-    case Chats.first_time_create_chat_and_message(user.id, content, model.id, overrides) do
+
+    case Chats.first_time_create_chat_and_message(user.id, content, model.id, is_audio, overrides) do
 
       {:ok, %{chat: chat, message: message}} ->
         context = Chats.get_ai_context(chat.id)
-        Chats.ChatsAgent.start_and_process(user.id, chat.id, model, serialized_profile, context, temp_id)
+        Chats.ChatsAgent.start_and_process(user.id, chat.id, model, serialized_profile, context, summary, temp_id)
         Chats.ChatNameCreator.start_generation(user.id, chat.id, model, naming_ai_profile, content)
         {:ok, chat, message}
       {:error, _failed_step, _failed_value, _changesets} ->
@@ -123,12 +127,13 @@ defmodule Messenger.Chats.ChatsBuilder do
   @doc"""
   Создает сообщение уже в существующем чате, настройки подтягиваются из БД
   """
-  defp create_message_in_existing_chat(user, model, profile, chat, content, temp_id) do
-    case Chats.create_message(chat.id, model.id, content) do
+  defp create_message_in_existing_chat(user, model, profile, chat, content, temp_id, is_audio) do
+    case Chats.create_message(chat.id, model.id, is_audio, content) do
       {:ok, message} ->
         context = Chats.get_ai_context(chat.id)
+        summaries = Chats.get_summaries(chat.id)
         serialized_profile = Serializer.profile_for_api_serialize(profile)
-        Chats.ChatsAgent.start_and_process(user.id, chat.id, model, serialized_profile, context, temp_id)
+        Chats.ChatsAgent.start_and_process(user.id, chat.id, model, serialized_profile, context, summaries, temp_id)
         start_summary(user, model, chat)
         {:ok, chat, message}
       {:error, _changeset} ->
@@ -146,18 +151,18 @@ defmodule Messenger.Chats.ChatsBuilder do
       naming_ai_profile =  AiProfiles.get_default_system_user_ai_profile(user.status, "summary")
       # get_messages_for_summary/3 отдает не только последние сообщения от summarized_up_to_message_id,
       # но и старый summary что бы его не забыть.
-      summary_context = Chats.get_messages_for_summary(chat.id, chat.summarized_up_to_message_id, chat.summary)
+      summary_context = Chats.get_messages_for_summary(chat.id, chat.summarized_up_to_message_id)
 
       case summary_context do
         {:ok, %{context: [], last_msg_id: nil}} ->
           :ok
-        {:ok, %{summary: summary, context: context, last_msg_id: last_msg_id}} ->
+        {:ok, %{context: context, last_msg_id: last_msg_id}} ->
           Chats.ChatSummaryCreator.start_generation(
             user.id,
             chat.id,
             model,
             naming_ai_profile,
-            %{summary: summary, context: context, last_msg_id: last_msg_id}
+            %{context: context, last_msg_id: last_msg_id}
           )
         {:error, _} ->
           :ok

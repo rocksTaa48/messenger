@@ -3,7 +3,7 @@ defmodule Messenger.Chats do
   import Ecto.Query
   alias Ecto.Multi
   alias Messenger.Repo
-  alias Messenger.Chats.{Chat, Message, Group, PinnedChat}
+  alias Messenger.Chats.{Chat, Message, Group, PinnedChat, ChatSummary}
 
   @doc"""
   Функция достает все сообщения из текущего чата пользователя
@@ -16,21 +16,7 @@ defmodule Messenger.Chats do
   Функция get_ai_context это контекст для AI:
   """
   def get_ai_context(chat_id) do
-
-    # 1) Достаем старый саммари
-    chat = Chat
-              |> where(id: ^chat_id)
-              |> Repo.one()
-
-    # 2) Проверяем что в саммари не шляпа
-    summary =
-      case chat.summary do
-        nil -> nil
-        "" -> nil
-        text -> if String.trim(text) == "", do: nil, else: text
-      end
-
-    # 3) Вытаскиваем хвост из последних 20 сообщений диалог user и assistant
+    # 1) Вытаскиваем хвост из последних 20 сообщений диалог user и assistant
     recent_messages =
       Message
       |> where(chat_id: ^chat_id)
@@ -42,17 +28,12 @@ defmodule Messenger.Chats do
 
       |> Enum.reverse() # Разворачиваем хвост в хронологическом порядке
 
-    # 4) Форматируем хвост для API
+    # 2) Форматируем хвост для API
     formatted_tail = Enum.map(recent_messages, fn msg ->
       %{role: msg.role, content: msg.content}
     end)
 
-    # 5) Формируем итоговый контекст в зависимости от первого сообщения
-    if summary do
-      [%{role: "assistant", content: "Краткое содержание предыдущей беседы: #{summary}"} | formatted_tail]
-    else
-      formatted_tail
-    end
+    formatted_tail
   end
 
   @doc"""
@@ -188,7 +169,7 @@ defmodule Messenger.Chats do
       |> Repo.aggregate(:count, :id)
   end
 
-  def get_messages_for_summary(chat_id, chat_summarized_up_to_message_id, chat_summary) do
+  def get_messages_for_summary(chat_id, chat_summarized_up_to_message_id) do
     last_id = chat_summarized_up_to_message_id || 0
     last_messages = Message
                     |> where(chat_id: ^chat_id)
@@ -198,14 +179,6 @@ defmodule Messenger.Chats do
                     |> Repo.all()
 
     context = Enum.map(last_messages, fn msg -> %{role: msg.role, content: msg.content} end)
-
-    summary =
-      case chat_summary do
-        nil -> nil
-        "" -> nil
-        summary -> summary
-      end
-
 
     context =
       case context do
@@ -220,14 +193,14 @@ defmodule Messenger.Chats do
         msg -> msg.id
       end
 
-    {:ok, %{summary: summary, context: context, last_msg_id: last_msg_id}}
+    {:ok, %{context: context, last_msg_id: last_msg_id}}
   end
 
 
   @doc"""
   Функция Инициализирующая первое создание чата, запись в БД как Чата так и первое его сообщение с пометкой 'system'
   """
-  def first_time_create_chat_and_message(user_id, content, model_id, overrides \\ %{}) do
+  def first_time_create_chat_and_message(user_id, content, model_id, is_audio, overrides \\ %{}) do
     last_message = content |> String.slice(0, 100)
     Multi.new()
       # 1: Создаем чат со всеми обязательными полями
@@ -244,7 +217,8 @@ defmodule Messenger.Chats do
         "chat_id" => chat.id,
         "content" => content,
         "ai_model_id" => String.to_integer(to_string(model_id)),
-        "role" => "user"
+        "role" => "user",
+        "is_audio" => is_audio
       })
     end)
 
@@ -356,12 +330,13 @@ defmodule Messenger.Chats do
   @doc"""
   ----------------------------------------Это участок работы с сообщениями (messages)-------------------------------
   """
-  def create_message(chat_id, ai_model_id, content) do
+  def create_message(chat_id, ai_model_id, is_audio, content) do
     Message.changeset(%Message{}, %{
       "chat_id" => String.to_integer(to_string(chat_id)),
       "ai_model_id" => String.to_integer(to_string(ai_model_id)),
       "content" => content,
-      "role" => "user"
+      "role" => "user",
+      "is_audio" => is_audio
     })
     |> Repo.insert()
   end
@@ -376,7 +351,8 @@ defmodule Messenger.Chats do
     tokens_total: tokens_total,
     cost_prompt: cost_prompt,
     cost_completion: cost_completion,
-    cost_total: cost_total
+    cost_total: cost_total,
+    is_aborted: is_aborted
   }) do
     last_message = content |> String.slice(0, 100)
     Multi.new()
@@ -390,7 +366,8 @@ defmodule Messenger.Chats do
       "tokens_total" => tokens_total || 0,
       "cost_prompt" => cost_prompt,
       "cost_completion" => cost_completion,
-      "cost_total" => cost_total
+      "cost_total" => cost_total,
+      "is_aborted" => is_aborted || false,
     }))
 
     |> Multi.update(:chat, Chat.changeset_for_update_last_message_or_model(%Chat{id: chat_id}, %{
@@ -400,4 +377,66 @@ defmodule Messenger.Chats do
 
     |> Repo.transaction()
   end
+
+  def get_summaries(chat_id) do
+    # 1) Достаем старый саммари
+    summaries = ChatSummary
+                |> where(chat_id: ^chat_id)
+                |> order_by(desc: :inserted_at)
+                |> limit(3)
+                |> Repo.all()
+                |> Enum.reverse()
+
+    # 2) Заголовки. Они зависят от количества summary
+    headers = case length(summaries) do
+      3 -> ["Далёкая история (сжато)", "Средняя история (сжато)", "Недавняя история (подробнее)"]
+      2 -> ["Средняя история (сжато)", "Недавняя история (подробнее)"]
+      1 -> ["Недавняя история (подробнее)"]
+      0 -> []
+    end
+
+    # 3) Формируем строку
+    context_block = summaries
+                    |> Enum.zip(headers)
+                    |> Enum.map(fn {summary, header} -> "## #{header}\n#{summary.content}" end)
+                    |> Enum.join("\n\n")
+
+    # 4) Оборачиваем в заголовок
+    context_block = if context_block == "" do
+      ""
+    else
+      "# Контекст предыдущего диалога\n\n#{context_block}"
+    end
+  end
+
+  def create_summary(%{
+    chat_id: chat_id,
+    content: content,
+    summarized_up_to_message_id: summarized_up_to_message_id,
+    tokens_prompt: tokens_prompt,
+    tokens_completion: tokens_completion,
+    tokens_total: tokens_total,
+    cost_prompt: cost_prompt,
+    cost_completion: cost_completion,
+    cost_total: cost_total
+    }) do
+    Multi.new()
+    |> Multi.insert(:chat_summary, ChatSummary.changeset(%ChatSummary{}, %{
+      "chat_id" => String.to_integer(to_string(chat_id)),
+      "content" => content || "",
+      "tokens_prompt" => tokens_prompt || 0,
+      "tokens_completion" => tokens_completion || 0,
+      "tokens_total" => tokens_total || 0,
+      "cost_prompt" => cost_prompt,
+      "cost_completion" => cost_completion,
+      "cost_total" => cost_total
+    }))
+
+    |> Multi.update(:chat, Chat.changeset_for_update_summary(%Chat{id: chat_id}, %{
+      summarized_up_to_message_id: summarized_up_to_message_id,
+    }))
+
+    |> Repo.transaction()
+  end
+
 end

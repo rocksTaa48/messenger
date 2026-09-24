@@ -8,6 +8,8 @@ defmodule Messenger.Serializer do
       "role" => message.role,
       "ai_model_id" => to_string(message.ai_model_id) || nil,
       "created_at" => DateTime.to_iso8601(message.inserted_at),
+      "is_audio" => message.is_audio || false,
+      "is_aborted" => message.is_aborted || false,
       "cursor_timestamp" => DateTime.to_iso8601(message.inserted_at)
     }
   end

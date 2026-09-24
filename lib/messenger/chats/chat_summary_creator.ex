@@ -8,10 +8,9 @@ defmodule Messenger.Chats.ChatSummaryCreator do
   @doc """
   Точка входа. Запускает задачу в фоне.
   """
-  def start_generation(user_id, chat_id, ai_model, ai_profile, %{summary: summary, context: context, last_msg_id: last_msg_id}) do
+  def start_generation(user_id, chat_id, ai_model, ai_profile, %{context: context, last_msg_id: last_msg_id}) do
     Task.Supervisor.start_child(Messenger.TaskSupervisor, fn ->
       process_generation(user_id, chat_id, ai_model, ai_profile, %{
-        summary: summary,
         context: context,
         last_msg_id: last_msg_id
       })
@@ -20,7 +19,6 @@ defmodule Messenger.Chats.ChatSummaryCreator do
 
   # Основной оркестратор процесса.
   defp process_generation(user_id, chat_id, ai_model, ai_profile, %{
-    summary: summary,
     context: context,
     last_msg_id: last_msg_id
   }) do
@@ -30,34 +28,10 @@ defmodule Messenger.Chats.ChatSummaryCreator do
     prompt_content = ai_profile.prompt.content
     model = ai_model.openrouter_model_id
 
-    dialogue_text =
-      context
-      |> Enum.map_join("\n\n", fn m -> "#{m.role}: #{m.content}" end)
-
-    old_summary = if summary in [nil, ""], do: "(нет)", else: summary
-
-    user_content = """
-    === СТАРОЕ САММАРИ ===
-    #{old_summary}
-    === КОНЕЦ ===
-
-    === ДИАЛОГ ДЛЯ СЖАТИЯ ===
-    #{dialogue_text}
-    === КОНЕЦ ===
-
-    Обнови саммари с учётом старого саммари и новых сообщений выше.
-    Верни ТОЛЬКО текст обновлённого саммари, без преамбул и вопросов.
-    """
-
-    complete_context = [
-      %{role: "system", content: prompt_content},
-      %{role: "user", content: user_content}
-    ]
-
     body =
       %{
         model: model,
-        messages: complete_context,
+        messages: [%{role: "system", content: prompt_content} | context],
         temperature: ai_profile.temperature,
         top_p: ai_profile.top_p,
         frequency_penalty: ai_profile.frequency_penalty,
@@ -68,8 +42,8 @@ defmodule Messenger.Chats.ChatSummaryCreator do
       |> Map.new()
 
     case fetch_with_retry(url, api_key, body, 1) do
-      {:ok, summary_content} ->
-        handle_successful_generation(user_id, chat_id, summary_content, last_msg_id)
+      {:ok, summary_content, usage} ->
+        handle_successful_generation(user_id, chat_id, summary_content, usage, last_msg_id)
 
       {:error, {:max_retries_exceeded, reason}} ->
         log_error(user_id, chat_id, "не удалось после #{@max_attempts} попыток: #{reason}")
@@ -91,14 +65,17 @@ defmodule Messenger.Chats.ChatSummaryCreator do
   # Ретраим только 429, 5xx и сетевые ошибки.
   defp fetch_with_retry(url, api_key, body, attempt) do
     case Req.post(url, req_options(api_key, body)) do
-      # Успешный ответ OpenRouter — берём content, если это строка
+      # Успешный ответ OpenRouter — берём content и usage
       {:ok,
         %Req.Response{
           status: 200,
-          body: %{"choices" => [%{"message" => %{"content" => content}} | _]}
+          body: %{
+            "choices" => [%{"message" => %{"content" => content}} | _],
+            "usage" => usage
+          }
         }}
       when is_binary(content) and content != "" ->
-        {:ok, content}
+        {:ok, content, usage}
 
       # 200, но content пустой/отсутствует — смотрим finish_reason
       {:ok,
@@ -158,13 +135,30 @@ defmodule Messenger.Chats.ChatSummaryCreator do
   end
 
   # Сохранение в БД и лог.
-  defp handle_successful_generation(user_id, chat_id, summary_content, last_msg_id) do
-    case Chats.update_chat(chat_id, user_id, %{
-      summary: summary_content,
-      summarized_up_to_message_id: last_msg_id
+  defp handle_successful_generation(user_id, chat_id, summary_content, usage, last_msg_id) do
+    # Безопасно извлекаем значения, подставляя нули если нет значения
+    prompt_tokens = Map.get(usage, "prompt_tokens", 0)
+    completion_tokens = Map.get(usage, "completion_tokens", 0)
+    total_tokens = Map.get(usage, "total_tokens", 0)
+
+    # OpenRouter может и не вернуть нихрена ставим дефолт 0.0
+    cost_prompt = Map.get(usage, "cost_prompt", 0.0)
+    cost_completion = Map.get(usage, "cost_completion", 0.0)
+    cost_total = Map.get(usage, "cost", 0.0)
+
+    case Chats.create_summary(%{
+      chat_id: chat_id,
+      content: summary_content,
+      summarized_up_to_message_id: last_msg_id,
+      tokens_prompt: prompt_tokens,
+      tokens_completion: completion_tokens,
+      tokens_total: total_tokens,
+      cost_prompt: cost_prompt,
+      cost_completion: cost_completion,
+      cost_total: cost_total
     }) do
-      {:ok, _chat} ->
-        Logger.info("Summary AI successful user=#{user_id} chat=#{chat_id}")
+      {:ok, _summary} ->
+        Logger.info("Summary AI successful user=#{user_id} chat=#{chat_id} tokens=#{total_tokens}")
 
       {:error, changeset} ->
         log_error(user_id, chat_id, "changeset: #{inspect(changeset.errors)}")

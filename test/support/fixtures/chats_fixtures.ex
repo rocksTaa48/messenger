@@ -47,4 +47,25 @@ defmodule Messenger.ChatsFixtures do
 
     group
   end
+
+  @doc """
+  Generate a chat_summary.
+  """
+  def chat_summary_fixture(attrs \\ %{}) do
+    {:ok, chat_summary} =
+      attrs
+      |> Enum.into(%{
+        content: "some content",
+        cost_completion: "120.5",
+        cost_prompt: "120.5",
+        cost_total: "120.5",
+        metadata: %{},
+        tokens_completion: 42,
+        tokens_prompt: 42,
+        tokens_total: 42
+      })
+      |> Messenger.Chats.create_chat_summary()
+
+    chat_summary
+  end
 end

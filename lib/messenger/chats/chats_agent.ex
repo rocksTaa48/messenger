@@ -11,10 +11,10 @@ defmodule Messenger.Chats.ChatsAgent do
     GenServer.start_link(__MODULE__, chat_id, name: via_tuple(chat_id))
   end
 
-  def start_and_process(user_id, chat_id, model, profile, context, temp_id) do
+  def start_and_process(user_id, chat_id, model, profile, context, summaries, temp_id) do
     case ensure_started(chat_id) do
       :ok ->
-        send_message(user_id, chat_id, model, profile, context, temp_id)
+        send_message(user_id, chat_id, model, profile, context, summaries, temp_id)
         :ok
 
       {:error, reason} ->
@@ -22,8 +22,8 @@ defmodule Messenger.Chats.ChatsAgent do
     end
   end
 
-  def send_message(user_id, chat_id, model, profile, context, temp_id) do
-    GenServer.cast(via_tuple(chat_id), {:process, user_id, model, profile, context, temp_id})
+  def send_message(user_id, chat_id, model, profile, context, summaries, temp_id) do
+    GenServer.cast(via_tuple(chat_id), {:process, user_id, model, profile, context, summaries, temp_id})
   end
 
   def stop_generation(chat_id) do
@@ -46,8 +46,8 @@ defmodule Messenger.Chats.ChatsAgent do
   end
 
   @impl true
-  def handle_cast({:process, user_id, model, profile, context, temp_id}, state) do
-    new_queue = :queue.in({user_id, model, profile, context, temp_id}, state.queue)
+  def handle_cast({:process, user_id, model, profile, context, summaries, temp_id}, state) do
+    new_queue = :queue.in({user_id, model, profile, context, summaries, temp_id}, state.queue)
 
     new_state =
       if state.processing do
@@ -109,12 +109,12 @@ defmodule Messenger.Chats.ChatsAgent do
   """
   defp process_next_message(%{queue: queue, chat_id: chat_id} = state) do
     case :queue.out(queue) do
-      {{:value, {user_id, model, profile, context, temp_id}}, new_queue} ->
+      {{:value, {user_id, model, profile, context, summaries, temp_id}}, new_queue} ->
         case DynamicSupervisor.start_child(
                Messenger.AiSupervisor,
                {Task, fn ->
                  try do
-                   process_stream(user_id, chat_id, model, profile, context, temp_id)
+                   process_stream(user_id, chat_id, model, profile, context, summaries, temp_id)
                  rescue
                    e ->
                      IO.inspect(e, label: "🤬 Критический сбой при обработке запроса")
@@ -149,18 +149,20 @@ defmodule Messenger.Chats.ChatsAgent do
   PROCESS STREAM ---------------------------------> Главная функция стрима! Единоразово try...after на весь процесс
   """
 
-  defp process_stream(user_id, chat_id, model, profile, context, temp_id) do
+  defp process_stream(user_id, chat_id, model, profile, context, summaries, temp_id) do
     # Инициализируем состояние в начале
     Process.put(:sse_buffer, "")
     Process.put(:full_content, "")
     Process.put(:final_usage, %{})
     Process.put(:status, :streaming)
 
-    # Собираем весь текст промпта (system prompt + context messages)
+    # Собираем весь текст промпта (system prompt + context messages) и считаем его длину для грубого подсчета токенов
     system_prompt = profile.prompt.content
-    all_text = Enum.reduce([%{role: "system", content: system_prompt} | context], "", fn msg, acc ->
-      acc <> (msg.content || "")
-    end)
+
+    all_text =
+      [%{role: "system", content: system_prompt <> "\n\n" <> summaries} | context]
+      |> Enum.map(fn msg -> msg.content end)
+      |> Enum.join("\n")
 
     # ========================> Считаем токены на вход модели
     estimated_prompt_tokens = ceil(String.length(all_text) / 2) || 0
@@ -181,7 +183,7 @@ defmodule Messenger.Chats.ChatsAgent do
 
 
     # Запускаем цикл с retry. Он вернет результат. Потом добавлю фолбэк на смену модели и разобью этого монстра на несколько частей
-    final_result = fetch_with_retry(user_id, chat_id, model, profile, context, temp_id, 1)
+    final_result = fetch_with_retry(user_id, chat_id, model, profile, context, summaries, temp_id, 1)
 
     try do
       case final_result do
@@ -213,10 +215,10 @@ defmodule Messenger.Chats.ChatsAgent do
   @doc"""
   HELPER ---------------------------------> Цикл повторных попыток отправки запроса
   """
-  defp fetch_with_retry(user_id, chat_id, model, profile, context, temp_id, attempt) do
+  defp fetch_with_retry(user_id, chat_id, model, profile, context, summaries, temp_id, attempt) do
     max_attempts = 3
 
-    case single_request(user_id, chat_id, model, profile, context, temp_id) do
+    case single_request(user_id, chat_id, model, profile, context, summaries, temp_id) do
       {:retry, reason} ->
         if attempt < max_attempts do
           delay = :timer.seconds(:math.pow(2, attempt - 1) |> round())
@@ -228,7 +230,7 @@ defmodule Messenger.Chats.ChatsAgent do
           Process.put(:full_content, "")
           Process.put(:final_usage, %{})
 
-          fetch_with_retry(user_id, chat_id, model, profile, context, temp_id, attempt + 1)
+          fetch_with_retry(user_id, chat_id, model, profile, context, summaries, temp_id, attempt + 1)
         else
           IO.inspect("❌ Превышен лимит retry: #{reason}")
           {:error, "Сервис временно недоступен. Попробуйте позже."}
@@ -248,14 +250,14 @@ defmodule Messenger.Chats.ChatsAgent do
   @doc"""
   HELPER ---------------------------------> Запрос к поставщику услуг
   """
-  defp single_request(user_id, chat_id, model, profile, context, temp_id) do
+  defp single_request(user_id, chat_id, model, profile, context, summaries, temp_id) do
     url = "https://openrouter.ai/api/v1/chat/completions"
     api_key = Application.get_env(:messenger, :ai_providers)[:openrouter_api_key]
     system_prompt = profile.prompt.content
 
     body = %{
              model: model.openrouter_model_id,
-             messages: [%{role: "system", content: system_prompt} | context],
+             messages: [%{role: "system", content: system_prompt <> "\n\n" <> summaries} | context],
              temperature: profile.temperature,
              top_p: profile.top_p,
              frequency_penalty: profile.frequency_penalty,
@@ -344,7 +346,7 @@ defmodule Messenger.Chats.ChatsAgent do
       cost_prompt: cost_details["upstream_inference_prompt_cost"] || 0.0,
       cost_completion: cost_details["upstream_inference_completions_cost"] || 0.0,
       cost_total: usage["cost"] || 0.0,
-      status: "completed"
+      is_aborted: false,
     }) do
       {:ok, %{message: inserted_message}} ->
         Phoenix.PubSub.broadcast(Messenger.PubSub, "user:#{user_id}:lobby",
@@ -383,23 +385,23 @@ defmodule Messenger.Chats.ChatsAgent do
       cost_prompt: estimated_prompt_cost,
       cost_completion: estimated_cost_completion || 0.0,
       cost_total: estimated_cost_total || 0.0,
-      status: "aborted"
+      is_aborted: true
     }) do
       {:ok, %{message: inserted_message}} ->
         Phoenix.PubSub.broadcast(Messenger.PubSub, "user:#{user_id}:lobby",
-          {:ai_stream_done, %{chat_id: chat_id, client_msg_id: temp_id, message_id: inserted_message.id, ai_model_id: inserted_message.ai_model_id, content: full_content, last_message: String.slice(full_content, 0, 100), status: "aborted"}}
+          {:ai_stream_done, %{chat_id: chat_id, client_msg_id: temp_id, message_id: inserted_message.id, ai_model_id: inserted_message.ai_model_id, content: full_content, last_message: String.slice(full_content, 0, 100), is_aborted: true}}
         )
       {:error, reason} ->
         IO.inspect(reason, label: "😡 ОШИБКА СОХРАНЕНИЯ В БД ПРИ ОТМЕНЕ ГЕНЕРАЦИИ")
         Phoenix.PubSub.broadcast(Messenger.PubSub, "user:#{user_id}:lobby",
-          {:ai_stream_done, %{chat_id: chat_id, ai_model_id: model.id, client_msg_id: temp_id, content: full_content, status: "aborted"}}
+          {:ai_stream_done, %{chat_id: chat_id, ai_model_id: model.id, client_msg_id: temp_id, content: full_content, is_aborted: true}}
         )
     end
   end
 
   defp send_aborted_empty(user_id, chat_id, model, temp_id) do
     Phoenix.PubSub.broadcast(Messenger.PubSub, "user:#{user_id}:lobby",
-      {:ai_stream_done, %{chat_id: chat_id, client_msg_id: temp_id, ai_model_id: model.id, content: "", status: "aborted_empty", error: true}}
+      {:ai_stream_done, %{chat_id: chat_id, client_msg_id: temp_id, ai_model_id: model.id, content: "", is_aborted: true, error: true}}
     )
   end
 

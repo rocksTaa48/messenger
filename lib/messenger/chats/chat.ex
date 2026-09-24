@@ -4,7 +4,6 @@ defmodule Messenger.Chats.Chat do
 
   schema "chats" do
     field :title, :string
-    field :summary, :string
     field :summarized_up_to_message_id, :integer
     field :last_message, :string
     field :profile_overrides, :map, default: %{}
@@ -15,6 +14,7 @@ defmodule Messenger.Chats.Chat do
     belongs_to :ai_model, Messenger.AiProfiles.AiModel
     has_many :messages, Messenger.Chats.Message
     has_many :pinned_chats, Messenger.Chats.PinnedChat
+    has_many :chat_summaries, Messenger.Chats.ChatSummary
 
     timestamps(type: :utc_datetime)
   end
@@ -26,7 +26,6 @@ defmodule Messenger.Chats.Chat do
       :user_id,
       :group_id,
       :ai_model_id,
-      :summary,
       :summarized_up_to_message_id,
       :last_message,
       :profile_overrides,
@@ -46,7 +45,6 @@ defmodule Messenger.Chats.Chat do
 
   def changeset_for_update_summary(chat, attrs) do
     chat
-    |> cast(attrs, [:summary, :summarized_up_to_message_id])
-    |> validate_length(:summary, min: 10, max: 8000)
+    |> cast(attrs, [:summarized_up_to_message_id])
   end
 end

@@ -168,4 +168,72 @@ defmodule Messenger.ChatsTest do
       assert %Ecto.Changeset{} = Chats.change_group(group)
     end
   end
+
+  describe "chat_summaries" do
+    alias Messenger.Chats.ChatSummary
+
+    import Messenger.ChatsFixtures
+
+    @invalid_attrs %{metadata: nil, tokens_prompt: nil, tokens_completion: nil, tokens_total: nil, cost_prompt: nil, cost_completion: nil, cost_total: nil, content: nil}
+
+    test "list_chat_summaries/0 returns all chat_summaries" do
+      chat_summary = chat_summary_fixture()
+      assert Chats.list_chat_summaries() == [chat_summary]
+    end
+
+    test "get_chat_summary!/1 returns the chat_summary with given id" do
+      chat_summary = chat_summary_fixture()
+      assert Chats.get_chat_summary!(chat_summary.id) == chat_summary
+    end
+
+    test "create_chat_summary/1 with valid data creates a chat_summary" do
+      valid_attrs = %{metadata: %{}, tokens_prompt: 42, tokens_completion: 42, tokens_total: 42, cost_prompt: "120.5", cost_completion: "120.5", cost_total: "120.5", content: "some content"}
+
+      assert {:ok, %ChatSummary{} = chat_summary} = Chats.create_chat_summary(valid_attrs)
+      assert chat_summary.metadata == %{}
+      assert chat_summary.tokens_prompt == 42
+      assert chat_summary.tokens_completion == 42
+      assert chat_summary.tokens_total == 42
+      assert chat_summary.cost_prompt == Decimal.new("120.5")
+      assert chat_summary.cost_completion == Decimal.new("120.5")
+      assert chat_summary.cost_total == Decimal.new("120.5")
+      assert chat_summary.content == "some content"
+    end
+
+    test "create_chat_summary/1 with invalid data returns error changeset" do
+      assert {:error, %Ecto.Changeset{}} = Chats.create_chat_summary(@invalid_attrs)
+    end
+
+    test "update_chat_summary/2 with valid data updates the chat_summary" do
+      chat_summary = chat_summary_fixture()
+      update_attrs = %{metadata: %{}, tokens_prompt: 43, tokens_completion: 43, tokens_total: 43, cost_prompt: "456.7", cost_completion: "456.7", cost_total: "456.7", content: "some updated content"}
+
+      assert {:ok, %ChatSummary{} = chat_summary} = Chats.update_chat_summary(chat_summary, update_attrs)
+      assert chat_summary.metadata == %{}
+      assert chat_summary.tokens_prompt == 43
+      assert chat_summary.tokens_completion == 43
+      assert chat_summary.tokens_total == 43
+      assert chat_summary.cost_prompt == Decimal.new("456.7")
+      assert chat_summary.cost_completion == Decimal.new("456.7")
+      assert chat_summary.cost_total == Decimal.new("456.7")
+      assert chat_summary.content == "some updated content"
+    end
+
+    test "update_chat_summary/2 with invalid data returns error changeset" do
+      chat_summary = chat_summary_fixture()
+      assert {:error, %Ecto.Changeset{}} = Chats.update_chat_summary(chat_summary, @invalid_attrs)
+      assert chat_summary == Chats.get_chat_summary!(chat_summary.id)
+    end
+
+    test "delete_chat_summary/1 deletes the chat_summary" do
+      chat_summary = chat_summary_fixture()
+      assert {:ok, %ChatSummary{}} = Chats.delete_chat_summary(chat_summary)
+      assert_raise Ecto.NoResultsError, fn -> Chats.get_chat_summary!(chat_summary.id) end
+    end
+
+    test "change_chat_summary/1 returns a chat_summary changeset" do
+      chat_summary = chat_summary_fixture()
+      assert %Ecto.Changeset{} = Chats.change_chat_summary(chat_summary)
+    end
+  end
 end
