@@ -24,4 +24,24 @@ defmodule Messenger.AccountsFixtures do
 
     user
   end
+
+  @doc """
+  Generate a transaction.
+  """
+  def transaction_fixture(attrs \\ %{}) do
+    {:ok, transaction} =
+      attrs
+      |> Enum.into(%{
+        cost_completion: "120.5",
+        cost_prompt: "120.5",
+        cost_total: "120.5",
+        metadata: %{},
+        tokens_completion: 42,
+        tokens_prompt: 42,
+        tokens_total: 42
+      })
+      |> Messenger.Accounts.create_transaction()
+
+    transaction
+  end
 end

@@ -336,6 +336,7 @@ defmodule Messenger.Chats.ChatsAgent do
     cost_details = usage["cost_details"] || %{}
 
     case Chats.create_assistant_message(%{
+      user_id: user_id,
       chat_id: chat_id,
       ai_model_id: model.id,
       content: full_content,
@@ -375,6 +376,7 @@ defmodule Messenger.Chats.ChatsAgent do
     estimated_cost_total = Decimal.add(estimated_prompt_cost, estimated_cost_completion)
 
     case Chats.create_assistant_message(%{
+      user_id: user_id,
       chat_id: chat_id,
       ai_model_id: model.id,
       content: full_content,

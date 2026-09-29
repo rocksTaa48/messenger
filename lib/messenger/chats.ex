@@ -3,6 +3,7 @@ defmodule Messenger.Chats do
   import Ecto.Query
   alias Ecto.Multi
   alias Messenger.Repo
+  alias Messenger.Accounts.Transaction
   alias Messenger.Chats.{Chat, Message, Group, PinnedChat, ChatSummary}
 
   @doc"""
@@ -239,6 +240,32 @@ defmodule Messenger.Chats do
     end
   end
 
+  def update_chat_title_with_ai(%{
+    user_id: user_id,
+    chat_id: chat_id,
+    content: content,
+    tokens_prompt: tokens_prompt,
+    tokens_completion: tokens_completion,
+    tokens_total: tokens_total,
+    cost_prompt: cost_prompt,
+    cost_completion: cost_completion,
+    cost_total: cost_total,
+  }) do
+    chat = Repo.get_by(Chat, id: chat_id, user_id: user_id)
+    Multi.new()
+    |> Multi.update(:chat, Chat.changeset(chat, %{"title" => content}))
+    |> Multi.insert(:transaction, Transaction.changeset(%Transaction{}, %{
+      "user_id" => user_id,
+      "tokens_prompt" => tokens_prompt || 0,
+      "tokens_completion" => tokens_completion || 0,
+      "tokens_total" => tokens_total || 0,
+      "cost_prompt" => cost_prompt,
+      "cost_completion" => cost_completion,
+      "cost_total" => cost_total,
+    }))
+    |> Repo.transaction()
+  end
+
   # Приколачивает чат в закрепе
   def update_chat_toggle(user_id, chat_id, group_id) do
     search_result =
@@ -342,6 +369,7 @@ defmodule Messenger.Chats do
   end
 
   def create_assistant_message(%{
+    user_id: user_id,
     chat_id: chat_id,
     ai_model_id: ai_model_id,
     content: content,
@@ -355,22 +383,27 @@ defmodule Messenger.Chats do
     is_aborted: is_aborted
   }) do
     last_message = content |> String.slice(0, 100)
+    chat = Repo.get(Chat, chat_id)
     Multi.new()
     |> Multi.insert(:message, Message.changeset(%Message{}, %{
       "chat_id" => String.to_integer(to_string(chat_id)),
       "ai_model_id" => String.to_integer(to_string(ai_model_id)),
       "content" => content || "",
       "role" => role,
+      "is_aborted" => is_aborted || false,
+    }))
+
+    |> Multi.insert(:transaction, Transaction.changeset(%Transaction{}, %{
+      "user_id" => user_id,
       "tokens_prompt" => tokens_prompt || 0,
       "tokens_completion" => tokens_completion || 0,
       "tokens_total" => tokens_total || 0,
       "cost_prompt" => cost_prompt,
       "cost_completion" => cost_completion,
       "cost_total" => cost_total,
-      "is_aborted" => is_aborted || false,
     }))
 
-    |> Multi.update(:chat, Chat.changeset_for_update_last_message_or_model(%Chat{id: chat_id}, %{
+    |> Multi.update(:chat, Chat.changeset_for_update_last_message_or_model(chat, %{
       "last_message" => last_message,
       "ai_model_id" => String.to_integer(to_string(ai_model_id)),
     }))
@@ -410,6 +443,7 @@ defmodule Messenger.Chats do
   end
 
   def create_summary(%{
+    user_id: user_id,
     chat_id: chat_id,
     content: content,
     summarized_up_to_message_id: summarized_up_to_message_id,
@@ -420,10 +454,17 @@ defmodule Messenger.Chats do
     cost_completion: cost_completion,
     cost_total: cost_total
     }) do
+    chat = Repo.get(Chat, chat_id)
+
     Multi.new()
+
     |> Multi.insert(:chat_summary, ChatSummary.changeset(%ChatSummary{}, %{
       "chat_id" => String.to_integer(to_string(chat_id)),
-      "content" => content || "",
+      "content" => content || ""
+    }))
+
+    |> Multi.insert(:transaction, Transaction.changeset(%Transaction{}, %{
+      "user_id" => user_id,
       "tokens_prompt" => tokens_prompt || 0,
       "tokens_completion" => tokens_completion || 0,
       "tokens_total" => tokens_total || 0,
@@ -432,7 +473,7 @@ defmodule Messenger.Chats do
       "cost_total" => cost_total
     }))
 
-    |> Multi.update(:chat, Chat.changeset_for_update_summary(%Chat{id: chat_id}, %{
+    |> Multi.update(:chat, Chat.changeset_for_update_summary(chat, %{
       summarized_up_to_message_id: summarized_up_to_message_id,
     }))
 

@@ -2,7 +2,7 @@ defmodule Messenger.Accounts do
 
   import Ecto.Query, warn: false
   alias Messenger.Repo
-  alias Messenger.Accounts.User
+  alias Messenger.Accounts.{User, Transaction}
 
   # Функция получения юзера по ID так-же получаем по current_user
   def get_user(id), do: Repo.get(User, id)
@@ -101,5 +101,14 @@ defmodule Messenger.Accounts do
     else
       {:error, :invalid_signature}
     end
+  end
+
+  @doc"""
+  Секция для работы с транзакциями
+  """
+  def record_transaction(attrs) do
+    %Transaction{}
+    |> Transaction.changeset(attrs)
+    |> Repo.insert!()
   end
 end

@@ -8,7 +8,6 @@ defmodule Messenger.Chats.Chat do
     field :last_message, :string
     field :profile_overrides, :map, default: %{}
 
-
     belongs_to :user, Messenger.Accounts.User
     belongs_to :group, Messenger.Chats.Group
     belongs_to :ai_model, Messenger.AiProfiles.AiModel

@@ -1,5 +1,6 @@
 defmodule MessengerWeb.TranscriptionController do
   alias Messenger.Chats
+  alias Messenger.Ai.MessageTranscript
   alias Messenger.AiProfiles
   use MessengerWeb, :controller
     require Logger
@@ -21,7 +22,7 @@ defmodule MessengerWeb.TranscriptionController do
       _ -> "webm"
     end
 
-    case Chats.ChatsTranscriptor.start_transcription(current_user, chat_id, ai_model, temp_id, base64, format) do
+    case MessageTranscript.start_generation(current_user, %{"chat_id" => chat_id, "ai_model" => ai_model, "temp_id" => temp_id, "base64" => base64, "format" => format}) do
       {:ok, pid} ->
         Logger.info("Transcription task started: #{inspect(pid)}")
       {:error, reason} ->

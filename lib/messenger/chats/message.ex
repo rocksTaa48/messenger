@@ -7,12 +7,6 @@ defmodule Messenger.Chats.Message do
     field :content, :string
     field :status, :string, default: "pending"
     field :error, :string
-    field :tokens_prompt, :integer
-    field :tokens_completion, :integer
-    field :tokens_total, :integer
-    field :cost_prompt, :decimal
-    field :cost_completion, :decimal
-    field :cost_total, :decimal
     field :is_aborted, :boolean
     field :is_audio, :boolean
     field :metadata, :map, default: %{}
@@ -31,12 +25,6 @@ defmodule Messenger.Chats.Message do
       :content,
       :chat_id,
       :ai_model_id,
-      :tokens_prompt,
-      :tokens_completion,
-      :tokens_total,
-      :cost_prompt,
-      :cost_completion,
-      :cost_total,
       :is_aborted,
       :is_audio,
       :metadata])

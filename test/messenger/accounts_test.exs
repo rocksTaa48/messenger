@@ -60,4 +60,70 @@ defmodule Messenger.AccountsTest do
       assert %Ecto.Changeset{} = Accounts.change_user(user)
     end
   end
+
+  describe "transactions" do
+    alias Messenger.Accounts.Transaction
+
+    import Messenger.AccountsFixtures
+
+    @invalid_attrs %{metadata: nil, tokens_prompt: nil, tokens_completion: nil, tokens_total: nil, cost_prompt: nil, cost_completion: nil, cost_total: nil}
+
+    test "list_transactions/0 returns all transactions" do
+      transaction = transaction_fixture()
+      assert Accounts.list_transactions() == [transaction]
+    end
+
+    test "get_transaction!/1 returns the transaction with given id" do
+      transaction = transaction_fixture()
+      assert Accounts.get_transaction!(transaction.id) == transaction
+    end
+
+    test "create_transaction/1 with valid data creates a transaction" do
+      valid_attrs = %{metadata: %{}, tokens_prompt: 42, tokens_completion: 42, tokens_total: 42, cost_prompt: "120.5", cost_completion: "120.5", cost_total: "120.5"}
+
+      assert {:ok, %Transaction{} = transaction} = Accounts.create_transaction(valid_attrs)
+      assert transaction.metadata == %{}
+      assert transaction.tokens_prompt == 42
+      assert transaction.tokens_completion == 42
+      assert transaction.tokens_total == 42
+      assert transaction.cost_prompt == Decimal.new("120.5")
+      assert transaction.cost_completion == Decimal.new("120.5")
+      assert transaction.cost_total == Decimal.new("120.5")
+    end
+
+    test "create_transaction/1 with invalid data returns error changeset" do
+      assert {:error, %Ecto.Changeset{}} = Accounts.create_transaction(@invalid_attrs)
+    end
+
+    test "update_transaction/2 with valid data updates the transaction" do
+      transaction = transaction_fixture()
+      update_attrs = %{metadata: %{}, tokens_prompt: 43, tokens_completion: 43, tokens_total: 43, cost_prompt: "456.7", cost_completion: "456.7", cost_total: "456.7"}
+
+      assert {:ok, %Transaction{} = transaction} = Accounts.update_transaction(transaction, update_attrs)
+      assert transaction.metadata == %{}
+      assert transaction.tokens_prompt == 43
+      assert transaction.tokens_completion == 43
+      assert transaction.tokens_total == 43
+      assert transaction.cost_prompt == Decimal.new("456.7")
+      assert transaction.cost_completion == Decimal.new("456.7")
+      assert transaction.cost_total == Decimal.new("456.7")
+    end
+
+    test "update_transaction/2 with invalid data returns error changeset" do
+      transaction = transaction_fixture()
+      assert {:error, %Ecto.Changeset{}} = Accounts.update_transaction(transaction, @invalid_attrs)
+      assert transaction == Accounts.get_transaction!(transaction.id)
+    end
+
+    test "delete_transaction/1 deletes the transaction" do
+      transaction = transaction_fixture()
+      assert {:ok, %Transaction{}} = Accounts.delete_transaction(transaction)
+      assert_raise Ecto.NoResultsError, fn -> Accounts.get_transaction!(transaction.id) end
+    end
+
+    test "change_transaction/1 returns a transaction changeset" do
+      transaction = transaction_fixture()
+      assert %Ecto.Changeset{} = Accounts.change_transaction(transaction)
+    end
+  end
 end
