@@ -5,7 +5,8 @@ defmodule Messenger.Ai.MessageStreaming do
   @doc """
   Точка входа. Запускает задачу в фоне. (user_id, chat_id, ai_model, ai_profile, context, summaries, temp_id)
   """
-  def start_generation(current_user, attrs) do
+  def start_generation(attrs) do
+    user_id = Map.get(attrs, "user_id")
     chat_id = Map.get(attrs, "chat_id")
     # Проверяем, не запущена ли уже задача для этого chat_id
     case Registry.lookup(Messenger.AgentRegistry, {:chat, chat_id}) do
@@ -13,11 +14,21 @@ defmodule Messenger.Ai.MessageStreaming do
         {:error, :already_generating}
       [] ->
         # Запускаем задачу только если чат свободен
-        Task.Supervisor.start_child(Messenger.TaskSupervisor, fn -> run(current_user, chat_id, attrs) end)
+        Task.Supervisor.start_child(Messenger.TaskSupervisor, fn -> run(user_id, chat_id, attrs) end)
     end
   end
 
-  defp run(current_user, chat_id, attrs) do
+  def stop_generation(chat_id) do
+    case Registry.lookup(Messenger.AgentRegistry, {:chat, chat_id}) do
+      [] ->
+        {:error, :not_found}
+      [{pid, _}] ->
+        send(pid, :stop)
+        :ok
+    end
+  end
+
+  defp run(user_id, chat_id, attrs) do
     context = Map.fetch!(attrs, "context")
     ai_model = Map.fetch!(attrs, "ai_model")
     ai_profile = Map.fetch!(attrs, "ai_profile")
@@ -27,7 +38,10 @@ defmodule Messenger.Ai.MessageStreaming do
 
     case Registry.register(Messenger.AgentRegistry, {:chat, chat_id}, true) do
       {:error, {:already_registered, _}} ->
-        :ok
+        # Падаем, потому что занято!
+        Phoenix.PubSub.broadcast(Messenger.PubSub, "user:#{user_id}:lobby",
+          {:ai_stream_error, %{chat_id: chat_id, ai_model: ai_model.id, reason: :already_registered}}
+        )
 
       {:ok, _} ->
         system_prompt = ai_profile.prompt.content
@@ -38,21 +52,20 @@ defmodule Messenger.Ai.MessageStreaming do
           |> Enum.map(fn msg -> msg.content end)
           |> Enum.join("\n")
 
-        # ========================> Считаем токены на вход модели
+        # -----------------------------------> Грубо считаем токены на вход модели <------------------------------------
         estimated_prompt_tokens = ceil(String.length(all_text) / 2) || 0
         prompt_tokens_dec = Decimal.new(estimated_prompt_tokens) || "0.0"
         cost_per_1m_input = ai_model.cost_per_1m_input || "0.0"
         estimated_prompt_cost = Decimal.div(Decimal.mult(cost_per_1m_input, prompt_tokens_dec), Decimal.new(1_000_000))
 
-        # Для логов!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
+        # Для логов!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         IO.inspect(estimated_prompt_tokens, label: "Грубая оценка -------------> #{estimated_prompt_tokens}")
         IO.inspect(prompt_tokens_dec, label: "Грубая оценка -------------> #{prompt_tokens_dec}")
         IO.inspect(cost_per_1m_input, label: "Грубая оценка -------------> #{cost_per_1m_input}")
         IO.inspect(estimated_prompt_cost, label: "Грубая оценка -------------> #{estimated_prompt_cost}")
 
         on_token = fn token ->
-          Phoenix.PubSub.broadcast(Messenger.PubSub, "user:#{current_user.id}:lobby",
+          Phoenix.PubSub.broadcast(Messenger.PubSub, "user:#{user_id}:lobby",
             {:ai_token, %{
               chat_id: to_string(chat_id),
               ai_model_id: ai_model.id,
@@ -73,13 +86,14 @@ defmodule Messenger.Ai.MessageStreaming do
 
         case action do
           {:ok, %{content: content, usage: usage}} ->
-            successful_transaction(current_user.id, chat_id, ai_model, content, usage, temp_id)
+            successful_transaction(user_id, chat_id, ai_model, content, usage, temp_id)
 
           {:halted, content} ->
-            save_aborted_message(current_user.id, chat_id, ai_model, content, temp_id, estimated_prompt_tokens, estimated_prompt_cost)
+            IO.inspect(content, label: "HALTED <--------------------------------------------------")
+            save_aborted_message(user_id, chat_id, ai_model, content, temp_id, estimated_prompt_tokens, estimated_prompt_cost)
 
           {:error, reason} ->
-            send_error_to_lobby(current_user.id, chat_id, ai_model.id, reason)
+            send_error_to_lobby(user_id, chat_id, ai_model.id, reason)
         end
     end
   end
@@ -118,6 +132,7 @@ defmodule Messenger.Ai.MessageStreaming do
     cost_per_1m_output = ai_model.cost_per_1m_output || Decimal.new(0) || "0.0"
     estimated_cost_completion = Decimal.div(Decimal.mult(cost_per_1m_output, completion_tokens_dec), Decimal.new(1_000_000)) || "0.0"
     estimated_cost_total = Decimal.add(estimated_prompt_cost, estimated_cost_completion)
+    IO.inspect(user_id, label: "Сам метод SaveAbortedMessage<--------------------------------------------------")
 
     case Chats.create_assistant_message(%{
       user_id: user_id,

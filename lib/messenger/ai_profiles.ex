@@ -15,11 +15,10 @@ defmodule Messenger.AiProfiles do
     |> Repo.one()
   end
 
-  # Достаем профиль по умолчанию для системных событий пользователя по его "status"
-  def get_default_system_user_ai_profile(user_status, purpose) do
+  # Достаем профиль по умолчанию для системных событий такие как naming, summary, title
+  def get_default_system_user_ai_profile(purpose) do
     AiProfile
     |> where(is_active: true)
-    |> where(tier: ^user_status)
     |> where(is_default: true)
     |> where(purpose: ^purpose)
     |> preload([:prompt])

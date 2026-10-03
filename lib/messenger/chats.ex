@@ -197,35 +197,6 @@ defmodule Messenger.Chats do
     {:ok, %{context: context, last_msg_id: last_msg_id}}
   end
 
-
-  @doc"""
-  Функция Инициализирующая первое создание чата, запись в БД как Чата так и первое его сообщение с пометкой 'system'
-  """
-  def first_time_create_chat_and_message(user_id, content, model_id, is_audio, overrides \\ %{}) do
-    last_message = content |> String.slice(0, 100)
-    Multi.new()
-      # 1: Создаем чат со всеми обязательными полями
-    |> Multi.insert(:chat, Chat.changeset(%Chat{}, %{
-      "user_id" => user_id,
-      "ai_model_id" => String.to_integer(to_string(model_id)),
-      "last_message" => last_message,
-      "profile_overrides" => overrides
-    }))
-
-     # 2: Собственно сообщение от пользователя
-    |> Multi.insert(:message, fn %{chat: chat} ->
-      Message.changeset(%Message{}, %{
-        "chat_id" => chat.id,
-        "content" => content,
-        "ai_model_id" => String.to_integer(to_string(model_id)),
-        "role" => "user",
-        "is_audio" => is_audio
-      })
-    end)
-
-    |> Repo.transaction()
-  end
-
   @doc"""
   Обновляем чат
   """
@@ -357,15 +328,56 @@ defmodule Messenger.Chats do
   @doc"""
   ----------------------------------------Это участок работы с сообщениями (messages)-------------------------------
   """
-  def create_message(chat_id, ai_model_id, is_audio, content) do
-    Message.changeset(%Message{}, %{
-      "chat_id" => String.to_integer(to_string(chat_id)),
-      "ai_model_id" => String.to_integer(to_string(ai_model_id)),
-      "content" => content,
-      "role" => "user",
-      "is_audio" => is_audio
-    })
-    |> Repo.insert()
+  def create_user_message(attrs) do
+    user_id = Map.fetch!(attrs, "user_id")
+    ai_model_id = Map.fetch!(attrs, "ai_model_id")
+    chat_id = Map.get(attrs, "chat_id")
+    chat = if chat_id, do: Repo.get_by(Chat, id: chat_id, user_id: user_id), else: nil
+    overrides = Map.get(attrs, "overrides")
+    content = Map.get(attrs, "content")
+    is_audio = Map.get(attrs, "is_audio",false)
+    case chat do
+      nil ->
+        last_message = content |> String.slice(0, 100)
+        Multi.new()
+
+        # 1: Создаем чат со всеми обязательными полями
+        |> Multi.insert(:chat, Chat.changeset(%Chat{}, %{
+          "user_id" => user_id,
+          "ai_model_id" => String.to_integer(to_string(ai_model_id)),
+          "last_message" => last_message,
+          "profile_overrides" => overrides
+        }))
+
+          # 2: Собственно сообщение от пользователя
+        |> Multi.insert(:message, fn %{chat: chat} ->
+          Message.changeset(%Message{}, %{
+            "chat_id" => chat.id,
+            "content" => content,
+            "ai_model_id" => String.to_integer(to_string(ai_model_id)),
+            "role" => "user",
+            "is_audio" => is_audio
+          })
+        end)
+
+        |> Repo.transaction()
+      chat ->
+        last_message = content |> String.slice(0, 100)
+        Multi.new()
+        |> Multi.insert(:message, Message.changeset(%Message{}, %{
+          "chat_id" => String.to_integer(to_string(chat.id)),
+          "ai_model_id" => String.to_integer(to_string(ai_model_id)),
+          "content" => content,
+          "role" => "user",
+          "is_audio" => is_audio
+        }))
+
+        |> Multi.update(:chat, Chat.changeset_for_update_last_message_or_model(chat, %{
+          "last_message" => last_message,
+        }))
+
+        |> Repo.transaction()
+    end
   end
 
   def create_assistant_message(%{

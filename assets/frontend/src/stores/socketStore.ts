@@ -409,6 +409,7 @@
                 message_id: number;
                 text: string;
                 ai_model_id?: string;
+                profile_overrides?: any;
             }) => {
                 update(state => {
                     if (!state.active_chat) return state;
@@ -433,6 +434,8 @@
                             // Если это был новый чат — фиксируем реальный chat_id,
                             // чтобы последующие ai:token / ai:stream_done не отфильтровались
                             id: state.active_chat.id || payload.chat_id,
+                            ai_model_id: payload.ai_model_id,
+                            profile_overrides: payload.profile_overrides,
                             messages
                         }
                     };

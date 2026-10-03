@@ -6,11 +6,12 @@ defmodule MessengerWeb.TranscriptionController do
     require Logger
 
   def upload(conn, %{"audio" => %Plug.Upload{} = upload} = params) do
+    IO.inspect(params, label: "ПАРАМСЫ ПЕРЕДАННЫЕ В ВИСПЕР")
     current_user = conn.assigns.current_user
     temp_id = params["temp_id"]
     chat_id = params["chat_id"]
-
-    ai_model = AiProfiles.get_ai_model(9)
+    ai_model_id = params["ai_model_id"]
+    ai_transcript_model = AiProfiles.get_ai_model(9)
     binary = File.read!(upload.path)
     base64 = Base.encode64(binary)
 
@@ -22,7 +23,21 @@ defmodule MessengerWeb.TranscriptionController do
       _ -> "webm"
     end
 
-    case MessageTranscript.start_generation(current_user, %{"chat_id" => chat_id, "ai_model" => ai_model, "temp_id" => temp_id, "base64" => base64, "format" => format}) do
+    profile_overrides = case Map.get(params, "profile_overrides") do
+      map when is_map(map) -> map
+      string when is_binary(string) -> Jason.decode!(string)
+      _ -> %{}
+    end
+
+    case MessageTranscript.start_generation(current_user, %{
+      "chat_id" => chat_id,
+      "ai_model_id" => ai_model_id,
+      "profile_overrides" => profile_overrides || %{},
+      "ai_transcript_model" => ai_transcript_model,
+      "temp_id" => temp_id,
+      "base64" => base64,
+      "format" => format
+    }) do
       {:ok, pid} ->
         Logger.info("Transcription task started: #{inspect(pid)}")
       {:error, reason} ->

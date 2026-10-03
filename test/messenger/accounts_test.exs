@@ -126,4 +126,66 @@ defmodule Messenger.AccountsTest do
       assert %Ecto.Changeset{} = Accounts.change_transaction(transaction)
     end
   end
+
+  describe "balances" do
+    alias Messenger.Accounts.Balance
+
+    import Messenger.AccountsFixtures
+
+    @invalid_attrs %{status: nil, metadata: nil, available: nil, reserved: nil, currency_units: nil}
+
+    test "list_balances/0 returns all balances" do
+      balance = balance_fixture()
+      assert Accounts.list_balances() == [balance]
+    end
+
+    test "get_balance!/1 returns the balance with given id" do
+      balance = balance_fixture()
+      assert Accounts.get_balance!(balance.id) == balance
+    end
+
+    test "create_balance/1 with valid data creates a balance" do
+      valid_attrs = %{status: "some status", metadata: %{}, available: "120.5", reserved: "some reserved", currency_units: 42}
+
+      assert {:ok, %Balance{} = balance} = Accounts.create_balance(valid_attrs)
+      assert balance.status == "some status"
+      assert balance.metadata == %{}
+      assert balance.available == Decimal.new("120.5")
+      assert balance.reserved == "some reserved"
+      assert balance.currency_units == 42
+    end
+
+    test "create_balance/1 with invalid data returns error changeset" do
+      assert {:error, %Ecto.Changeset{}} = Accounts.create_balance(@invalid_attrs)
+    end
+
+    test "update_balance/2 with valid data updates the balance" do
+      balance = balance_fixture()
+      update_attrs = %{status: "some updated status", metadata: %{}, available: "456.7", reserved: "some updated reserved", currency_units: 43}
+
+      assert {:ok, %Balance{} = balance} = Accounts.update_balance(balance, update_attrs)
+      assert balance.status == "some updated status"
+      assert balance.metadata == %{}
+      assert balance.available == Decimal.new("456.7")
+      assert balance.reserved == "some updated reserved"
+      assert balance.currency_units == 43
+    end
+
+    test "update_balance/2 with invalid data returns error changeset" do
+      balance = balance_fixture()
+      assert {:error, %Ecto.Changeset{}} = Accounts.update_balance(balance, @invalid_attrs)
+      assert balance == Accounts.get_balance!(balance.id)
+    end
+
+    test "delete_balance/1 deletes the balance" do
+      balance = balance_fixture()
+      assert {:ok, %Balance{}} = Accounts.delete_balance(balance)
+      assert_raise Ecto.NoResultsError, fn -> Accounts.get_balance!(balance.id) end
+    end
+
+    test "change_balance/1 returns a balance changeset" do
+      balance = balance_fixture()
+      assert %Ecto.Changeset{} = Accounts.change_balance(balance)
+    end
+  end
 end

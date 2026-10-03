@@ -1,6 +1,7 @@
 defmodule MessengerWeb.Actions.ChatActions do
   import Phoenix.Channel, only: [push: 3]
   import Phoenix.Socket, only: [assign: 3]
+  alias Messenger.Ai.MessageStreaming
   alias Messenger.Chats
   alias Messenger.AiProfiles
   alias Messenger.Serializer
@@ -13,11 +14,11 @@ defmodule MessengerWeb.Actions.ChatActions do
     ai_model_id = current_user.ai_model_id
     ai_models = AiProfiles.get_all_users_ai_models()
     case Chats.ChatsBuilder.build_ai_profile(current_user, _payload) do
-      {:ok, %{model: model, profile: profile}} ->
+      {:ok, %{ai_model: ai_model, ai_profile: ai_profile}} ->
       formatted_ai_models = Enum.map(ai_models, &Serializer.ai_model_serialize/1)
-      formatted_user_ai_model = Serializer.ai_model_serialize(model)
-      formatted_user_ai_profile = Serializer.ai_profile_serialize(profile)
-      overrides = profile |> Map.take([:temperature, :top_p, :presence_penalty, :frequency_penalty])
+      formatted_user_ai_model = Serializer.ai_model_serialize(ai_model)
+      formatted_user_ai_profile = Serializer.ai_profile_serialize(ai_profile)
+      overrides = ai_profile |> Map.take([:temperature, :top_p, :presence_penalty, :frequency_penalty])
       new_state = socket.assigns.state
                   |> Map.put("ai_model", formatted_user_ai_model)
                   |> Map.put("ai_models", formatted_ai_models)
@@ -41,10 +42,10 @@ defmodule MessengerWeb.Actions.ChatActions do
     chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
 
     case Chats.ChatsBuilder.build_ai_profile(current_user, payload) do
-      {:ok, %{model: model, profile: profile}} ->
+      {:ok, %{ai_model: ai_model, ai_profile: ai_profile}} ->
         formatted_ai_models = Enum.map(ai_models, &Serializer.ai_model_serialize/1)
-        formatted_user_ai_model = Serializer.ai_model_serialize(model)
-        formatted_user_ai_profile = Serializer.ai_profile_serialize(profile)
+        formatted_user_ai_model = Serializer.ai_model_serialize(ai_model)
+        formatted_user_ai_profile = Serializer.ai_profile_serialize(ai_profile)
         new_state = socket.assigns.state
                     |> Map.put("ai_model", formatted_user_ai_model)
                     |> Map.put("ai_models", formatted_ai_models)
@@ -114,20 +115,10 @@ defmodule MessengerWeb.Actions.ChatActions do
   CREATE_MESSAGE:    Мультифункция создает чат и сообщение в нем от пользователя
   """
   def handle_in("click_submit_message", payload, socket) do
-    chat_id = Map.get(payload, "chat_id")
+    IO.inspect(payload, label: "ПАРАМСЫ ПЕРЕДАННЫЕ при вебсокете")
+
     current_user = socket.assigns.current_user
-    ai_models = AiProfiles.get_all_users_ai_models()
-    chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
-
-    action =
-      case chat do
-        nil ->
-          Chats.ChatsBuilder.create_first_message(current_user, payload)
-        existing_chat ->
-          Chats.ChatsBuilder.create_message_in_chat(current_user, payload)
-      end
-
-    case action do
+    case Chats.MessageSender.create_message(current_user, payload) do
       {:ok, chat, message} ->
         # Стейт не обновляем а только отдаем необходимое!
         {:reply, {:ok, %{
@@ -156,7 +147,7 @@ defmodule MessengerWeb.Actions.ChatActions do
         nil ->
           {:reply, {:error, %{reason: "failed_to_process_message"}}, socket}
         existing_chat ->
-          Chats.ChatsAgent.stop_generation(chat.id)
+          MessageStreaming.stop_generation(chat.id)
       end
     {:reply, :ok, socket}
   end

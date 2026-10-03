@@ -34,6 +34,9 @@ defmodule Messenger.Chats.ChatsBuilder do
   для отправки в модель перед генерацией.
   """
   def build_ai_profile(current_user, payload \\ %{}) do
+
+    IO.inspect(payload, label: "ПЭЁЛОАД КОТОРЫЙ ПРИЛЕТЕЛ В БИЛДЕР")
+
     chat_id = Map.get(payload, "chat_id")
     chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
     default_user_ai_profile = AiProfiles.get_default_user_ai_profile(current_user.status) # Default user AiProfile
@@ -72,7 +75,7 @@ defmodule Messenger.Chats.ChatsBuilder do
           |> Map.merge(user_overrides)
           |> Map.merge(overrides)
 
-        {:ok, %{model: current_ai_model, profile: current_ai_profile}}
+        {:ok, %{ai_model: current_ai_model, ai_profile: current_ai_profile}}
 
       chat ->
         current_chat_ai_profile = chat.profile_overrides || %{}
@@ -97,7 +100,7 @@ defmodule Messenger.Chats.ChatsBuilder do
           |> Map.merge(user_overrides)
           |> Map.merge(chat_overrides)
 
-        {:ok, %{model: current_ai_model, profile: current_ai_profile}}
+        {:ok, %{ai_model: current_ai_model, ai_profile: current_ai_profile}}
     end
   end
 
@@ -113,7 +116,7 @@ defmodule Messenger.Chats.ChatsBuilder do
     IO.inspect(overrides, label: "<_________________CREATE MESSAGE OVERRIDES INSPECT")
 
 
-    case Chats.first_time_create_chat_and_message(user.id, content, model.id, is_audio, overrides) do
+    case Chats.create_user_message(user.id, content, model.id, is_audio, overrides) do
       {:ok, %{chat: chat, message: message}} ->
         CreateTitleForChat.start_generation(user, %{"chat_id" => chat.id, "ai_model" => model, "ai_profile" => naming_ai_profile, "content" => content})
         context = Chats.get_ai_context(chat.id)
@@ -135,7 +138,7 @@ defmodule Messenger.Chats.ChatsBuilder do
   Создает сообщение уже в существующем чате, настройки подтягиваются из БД
   """
   defp create_message_in_existing_chat(user, model, profile, chat, content, temp_id, is_audio) do
-    case Chats.create_message(chat.id, model.id, is_audio, content) do
+    case Chats.create_user_message(chat.id, model.id, is_audio, content) do
       {:ok, message} ->
         context = Chats.get_ai_context(chat.id)
         summaries = Chats.get_summaries(chat.id)

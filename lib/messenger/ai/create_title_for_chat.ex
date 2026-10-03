@@ -4,12 +4,12 @@ defmodule Messenger.Ai.CreateTitleForChat do
   @doc """
   Точка входа. Запускает задачу в фоне.
   """
-  def start_generation(current_user, attrs) do
-    Task.Supervisor.start_child(Messenger.TaskSupervisor, fn -> run(current_user, attrs) end)
+  def start_generation(attrs) do
+    Task.Supervisor.start_child(Messenger.TaskSupervisor, fn -> run(attrs) end)
   end
 
 
-  defp run(current_user, attrs) do
+  defp run(attrs) do
     client_attrs = %{
       "content" => Map.fetch!(attrs, "content"),
       "ai_profile" => Map.fetch!(attrs, "ai_profile"),
@@ -20,20 +20,21 @@ defmodule Messenger.Ai.CreateTitleForChat do
 
     case action do
       {:ok, %{content: content, usage: usage}} ->
-        successful_transaction(current_user, attrs, content, usage)
+        successful_transaction(attrs, content, usage)
 
       {:error, reason} ->
-        send_error_to_lobby(current_user.id, Map.get(attrs, "chat_id"), reason)
+        send_error_to_lobby(Map.fetch!(attrs, "user_id"), Map.get(attrs, "chat_id"), reason)
     end
   end
 
   # Запрос состоялся, удачная транзакция
-  defp successful_transaction(current_user, attrs, content, usage) do
+  defp successful_transaction(attrs, content, usage) do
+    ai_model = Map.fetch!(attrs, "ai_model")
+    user_id = Map.fetch!(attrs, "user_id")
     chat_id = Map.get(attrs, "chat_id")
     temp_id = Map.get(attrs, "temp_id")
-    ai_model = Map.fetch!(attrs, "ai_model")
+
     safe_title = String.slice(content, 0, 99)
-    user_id = current_user.id
 
     case Chats.update_chat_title_with_ai(%{
       user_id: user_id,
@@ -49,12 +50,12 @@ defmodule Messenger.Ai.CreateTitleForChat do
       {:ok, _chat} ->
         Phoenix.PubSub.broadcast(
           Messenger.PubSub,
-          "user:#{current_user.id}:lobby",
+          "user:#{user_id}:lobby",
           {:chat_title_update, %{chat_id: chat_id, title: safe_title}}
         )
 
       {:error, changeset} ->
-        send_error_to_lobby(current_user.id, chat_id, "DB error: #{inspect(changeset.errors)}")
+        send_error_to_lobby(user_id, chat_id, "DB error: #{inspect(changeset.errors)}")
     end
   end
 

@@ -14,7 +14,7 @@ defmodule Messenger.Ai.OpenRouterClient do
 
     base64 = Map.fetch!(attrs, "base64")
     format = Map.fetch!(attrs, "format")
-    ai_model = Map.fetch!(attrs, "ai_model")
+    ai_model = Map.fetch!(attrs, "ai_transcript_model")
     chat_id = Map.get(attrs, "chat_id")
     temp_id = Map.get(attrs, "temp_id")
 
@@ -178,33 +178,51 @@ defmodule Messenger.Ai.OpenRouterClient do
              ],
              into: fn
                {:data, data}, acc ->
-                 receive do
-                   :stop ->
-                     state = Process.get(:stream_acc)
-                     Process.put(:stream_acc, %{state | halted: true})
-                     {:halt, acc}
-                 after
-                   0 ->
-                     state = Process.get(:stream_acc)
-                     new_buffer = state.sse_buffer <> data
-                     parts = String.split(new_buffer, "\n\n")
-                     {events, [rest]} = Enum.split(parts, -1)
+                 if Process.get(:stream_acc).halted do
+                   {:halt, acc}
+                 else
+                   receive do
+                     :stop ->
+                       state = Process.get(:stream_acc)
+                       Process.put(:stream_acc, %{state | halted: true})
+                       {:halt, acc}
+                   after
+                     0 ->
+                       state = Process.get(:stream_acc)
+                       new_buffer = state.sse_buffer <> data
+                       parts = String.split(new_buffer, "\n\n")
+                       {events, [rest]} = Enum.split(parts, -1)
 
-                     new_state =
-                       Enum.reduce(events, state, fn event, current ->
-                         parse_sse_event(event, current, on_token_fn)
-                       end)
+                       new_state =
+                         Enum.reduce(events, state, fn event, current ->
+                           parse_sse_event(event, current, on_token_fn)
+                         end)
 
-                     Process.put(:stream_acc, %{new_state | sse_buffer: rest})
-                     {:cont, acc}
+                       Process.put(:stream_acc, %{new_state | sse_buffer: rest})
+                       {:cont, acc}
+                   end
                  end
 
                _other, acc ->
                  {:cont, acc}
              end
            ) do
-        {:ok, resp}     -> Error.classify_stream(resp, Process.get(:stream_acc))
-        {:error, _} = e -> Error.classify_stream(e)
+        {:ok, _resp} ->
+          state = Process.get(:stream_acc, %{content: "", usage: %{}, halted: false})
+          if state.halted do
+            {:halted, state.content}
+          else
+            {:ok, %{content: state.content, usage: state.usage}}
+          end
+
+        {:error, reason} ->
+          # Если Req упал из-за сети, но мы при этом были halted, считаем это успешной остановкой
+          state = Process.get(:stream_acc, %{content: "", usage: %{}, halted: false})
+          if state.halted do
+            {:halted, state.content}
+          else
+            Error.classify_stream({:error, reason})
+          end
       end
     rescue
       _ in ArgumentError ->
@@ -242,7 +260,8 @@ defmodule Messenger.Ai.OpenRouterClient do
           {:ok, %{"usage" => usage}} ->
             %{acc | usage: usage}
 
-          {:ok, %{"choices" => [%{"delta" => %{"content" => token}} | _]}} when is_binary(token) ->
+          {:ok, %{"choices" => [%{"delta" => %{"content" => token}} | _]}}
+          when is_binary(token) ->
             on_token_fn.(token)
             %{acc | content: acc.content <> token}
 
@@ -257,39 +276,4 @@ defmodule Messenger.Ai.OpenRouterClient do
         acc
     end
   end
-
-  defp build_message_body(ai_model, ai_profile, summaries, context) do
-    %{
-      model: ai_model,
-      messages: [%{role: "system", content: ai_profile.prompt.content <> "\n\n" <> summaries} | context],
-      temperature: ai_profile.temperature,
-      top_p: ai_profile.top_p,
-      frequency_penalty: ai_profile.frequency_penalty,
-      presence_penalty: ai_profile.presence_penalty,
-      max_tokens: ai_profile.max_completion_tokens,
-      stream: true,
-      stream_options: %{include_usage: true}
-    }
-    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-    |> Map.new()
-  end
-
-  defp parse_sse_event(event, acc, on_token_fn) do
-    event = String.trim(event)
-    cond do
-      String.starts_with?(event, "data: ") ->
-        data = String.replace_prefix(event, "data: ", "")
-        case Jason.decode(data) do
-          {:ok, %{"usage" => usage}} ->
-            %{acc | usage: usage}
-          {:ok, %{"choices" => [%{"delta" => %{"content" => token}} | _]}} when is_binary(token) ->
-            on_token_fn.(token) # Отправляем токен наружу через колбэк
-            %{acc | content: acc.content <> token}
-          _ -> acc
-        end
-      event == "data: [DONE]" -> acc
-      true -> acc
-    end
-  end
-
 end

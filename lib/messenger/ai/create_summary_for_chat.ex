@@ -5,12 +5,12 @@ defmodule Messenger.Ai.CreateSummaryForChat do
   @doc """
   Точка входа. Запускает задачу в фоне.
   """
-  def start_generation(current_user, attrs) do
-    Task.Supervisor.start_child(Messenger.TaskSupervisor, fn -> run(current_user, attrs) end)
+  def start_generation(attrs) do
+    Task.Supervisor.start_child(Messenger.TaskSupervisor, fn -> run(attrs) end)
   end
 
 
-  defp run(current_user, attrs) do
+  defp run(attrs) do
     client_attrs = %{
       "context" => Map.fetch!(attrs, "context"),
       "ai_profile" => Map.fetch!(attrs, "ai_profile"),
@@ -21,16 +21,15 @@ defmodule Messenger.Ai.CreateSummaryForChat do
 
     case action do
       {:ok, %{content: content, usage: usage}} ->
-        successful_transaction(current_user, attrs, content, usage)
+        successful_transaction(Map.get(attrs, "user_id"), attrs, content, usage)
 
       {:error, reason} ->
-        log_error(current_user.id, Map.get(attrs, "chat_id"), reason)
+        log_error(Map.get(attrs, "user_id"), Map.get(attrs, "chat_id"), reason)
     end
   end
 
   # Запрос состоялся, удачная транзакция
-  defp successful_transaction(current_user, attrs, content, usage) do
-    user_id = current_user.id
+  defp successful_transaction(user_id, attrs, content, usage) do
     chat_id = Map.get(attrs, "chat_id")
     ai_model = Map.fetch!(attrs, "ai_model")
     last_msg_id = Map.get(attrs, "last_msg_id")

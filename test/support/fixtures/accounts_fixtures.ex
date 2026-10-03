@@ -44,4 +44,22 @@ defmodule Messenger.AccountsFixtures do
 
     transaction
   end
+
+  @doc """
+  Generate a balance.
+  """
+  def balance_fixture(attrs \\ %{}) do
+    {:ok, balance} =
+      attrs
+      |> Enum.into(%{
+        available: "120.5",
+        currency_units: 42,
+        metadata: %{},
+        reserved: "some reserved",
+        status: "some status"
+      })
+      |> Messenger.Accounts.create_balance()
+
+    balance
+  end
 end
