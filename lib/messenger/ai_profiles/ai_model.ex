@@ -14,6 +14,7 @@ defmodule Messenger.AiProfiles.AiModel do
     field :config, :map, default: %{}
     field :tier, :string, default: "free" # "free" | "premium" | "enterprise"
     field :is_default, :boolean, default: false
+    field :display_color, :string       # Например "ffffff" это для UI
     field :display_name, :string        # Например "GPT-4o Mini"
     field :display_description, :string   # Можно добавить что то вроде "Быстрая и дешевая модель для генерации текстов"
     field :display_icon, :string        # Линк на иконку или название в паршале иконок
@@ -21,6 +22,7 @@ defmodule Messenger.AiProfiles.AiModel do
     has_many :messages, Messenger.Chats.Message
     has_many :chats, Messenger.Chats.Chat
     has_many :users, Messenger.Accounts.User
+    has_many :transactions, Messenger.Accounts.Transaction
 
     timestamps(type: :utc_datetime)
   end
@@ -33,6 +35,7 @@ defmodule Messenger.AiProfiles.AiModel do
       :display_icon,
       :display_name,
       :display_description,
+      :display_color,
       :tier,
       :is_default,
       :model_name,

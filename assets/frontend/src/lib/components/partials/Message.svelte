@@ -1,5 +1,5 @@
 <script lang="ts">
-    import {MicVocal, Square, Ban} from 'lucide-svelte';
+    import {MicVocal, Square, Ban, RotateCw} from 'lucide-svelte';
     import { renderMarkdown } from '../../markdown';
     import Icons from './Icons.svelte';
     import { appState } from '../../../stores/socketStore';
@@ -12,13 +12,15 @@
         is_streaming?: boolean;
         is_audio?: boolean;
         is_aborted?: boolean;
+        error?: boolean;
+        is_pending?: boolean;
+        temp_id?: string;
         ai_model_id: number | string;
     }>;
 
-    // Достаем массив моделей из стора
     $: aiModels = $appState?.ai_models || [];
+    $: awaiting = $appState?.active_chat?.awaiting_response ?? false;
 
-    // Функция поиска провайдера по ID модели из стора
     function getProvider(modelId: number | string | undefined): string {
         if (!modelId) return 'default';
         const model = aiModels.find(m => String(m.id) === String(modelId));
@@ -62,34 +64,44 @@
             }, 1500);
         }).catch(e => console.warn('copy failed', e));
     }
+
+    function handleRetry() {
+        appState.retryLastMessage();
+    }
 </script>
 
-{#each messages as msg (msg.id)}
+{#each messages as msg, i (msg.id)}
     {#if msg.role === 'assistant'}
-        <!-- ЛЕВАЯ СТОРОНА: Вертикальный стек (иконка сверху, текст снизу) -->
+        {@const canRetryAssistant = msg.error && i === messages.length - 1 && !awaiting}
+        <!-- ЛЕВАЯ СТОРОНА -->
         <div class="group flex w-full flex-col items-start max-w-[85%] mb-4">
-
-            <!-- Круглая иконка бота сверху, прижата к левому краю -->
             <div class="w-8 h-8 rounded-full bg-[#2481cc] flex items-center justify-center text-white shadow-sm mb-2">
-                <Icons
-                        provider={getProvider(msg.ai_model_id)}
-                        size={16}
-                />
+                <Icons provider={getProvider(msg.ai_model_id)} size={16} />
             </div>
 
-            <!-- Бабл с ответом под иконкой, выровнен по левому краю -->
             <div class="w-full px-4 py-2.5 text-xs font-medium border rounded-[20px] relative break-words shadow-md text-left bg-white/[0.03] border-white/5 text-gray-200 rounded-tl-sm">
                 <div class="message-content" on:click={handleContentClick}>
                     {#if msg.error && msg.is_aborted}
-                        <!-- Прерывание до получения ответа -->
                         <p class="leading-relaxed text-yellow-400/80 italic flex items-center gap-2">
                             <span>😕 Генерация прервана до ответа</span>
                         </p>
                     {:else if msg.error}
-                        <!-- Обычная ошибка -->
-                        <p class="leading-relaxed text-red-400/80 italic flex items-center gap-2">
+                        <div class="leading-relaxed text-red-400/80 italic flex items-center gap-2">
                             <span>😩 Не удалось получить ответ</span>
-                        </p>
+                            {#if canRetryAssistant}
+                                <button
+                                        type="button"
+                                        on:click={handleRetry}
+                                        class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-500/20 hover:bg-red-500/30 active:bg-red-500/40 text-red-300 transition-colors shrink-0"
+                                        aria-label="Повторить"
+                                        title="Повторить"
+                                >
+                                    <span class="px-3 py-3">
+                                        <RotateCw size={11} strokeWidth={2.5} />
+                                    </span>
+                                </button>
+                            {/if}
+                        </div>
                     {:else if msg.is_streaming}
                         <p class="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                     {:else}
@@ -98,9 +110,7 @@
                 </div>
 
                 <div class="flex items-center justify-between gap-2 mt-1 select-none">
-                    <span class="text-[9px] font-bold opacity-40">
-                        {formatTime(msg.created_at)}
-                    </span>
+                    <span class="text-[9px] font-bold opacity-40">{formatTime(msg.created_at)}</span>
                     {#if msg.is_aborted}
                         <span class="text-[9px] font-bold opacity-40">
                             <Ban size={12} strokeWidth={2.5} />
@@ -111,17 +121,19 @@
         </div>
 
     {:else}
-        <!-- ПРАВАЯ СТОРОНА: Только бабл пользователя, прижат к правому краю -->
-        <div class="group flex w-full justify-end mb-4">
+        {@const canRetryUser = i === messages.length - 1
+            && !awaiting
+            && !msg.is_pending
+            && !String(msg.id).startsWith('temp-')}
+        <!-- ПРАВАЯ СТОРОНА -->
+        <div class="group flex flex-col items-end w-full mb-4 gap-1">
             <div class="max-w-[85%] px-4 py-2.5 text-xs font-medium border rounded-[20px] relative break-words shadow-md text-left bg-[#2481cc]/20 border-[#2481cc]/30 text-white rounded-tr-sm">
                 <div class="message-content" on:click={handleContentClick}>
                     <p class="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                 </div>
 
                 <div class="flex items-center justify-between gap-2 mt-1 select-none">
-                    <span class="text-[9px] font-bold opacity-40">
-                        {formatTime(msg.created_at)}
-                    </span>
+                    <span class="text-[9px] font-bold opacity-40">{formatTime(msg.created_at)}</span>
                     {#if msg.is_audio}
                         <span class="text-[9px] font-bold opacity-40">
                             <MicVocal size={12} strokeWidth={2.5} />
@@ -129,9 +141,27 @@
                     {/if}
                 </div>
             </div>
+
+            {#if canRetryUser}
+                <div class="flex items-center gap-2 text-red-400/80 italic text-[11px] mr-1">
+                    <span>😩 Не удалось получить ответ</span>
+                    <button
+                            type="button"
+                            on:click={handleRetry}
+                            class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-500/20 hover:bg-red-500/30 active:bg-red-500/40 text-red-300 transition-colors shrink-0"
+                            aria-label="Повторить"
+                            title="Повторить"
+                    >
+                        <span class="px-3 py-3">
+                            <RotateCw size={11} strokeWidth={2.5} />
+                        </span>
+                    </button>
+                </div>
+            {/if}
         </div>
     {/if}
 {/each}
+
 
 <style>
     /* Сброс отступов по краям бабла — иначе первый/последний <p> раздувают пузырь */

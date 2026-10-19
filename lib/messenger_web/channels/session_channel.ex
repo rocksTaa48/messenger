@@ -30,6 +30,9 @@ defmodule MessengerWeb.SessionChannel do
     # Подписываемся на изменения обязательно!
     Phoenix.PubSub.subscribe(Messenger.PubSub, "user:#{current_user.id}:lobby")
 
+    user_avatar = current_user.raw_data["photo_url"]
+    user_first_name = current_user.raw_data["first_name"]
+    user_last_name = current_user.raw_data["last_name"]
     # Общая структура стейта передаваемого на фронт
     base_state = %{
       "user" => %{
@@ -38,7 +41,10 @@ defmodule MessengerWeb.SessionChannel do
         "username" => current_user.username,
         "first_name" => current_user.first_name,
         "last_name" => current_user.first_name,
-        "role" => current_user.role
+        "role" => current_user.role,
+        "photo_url" => user_avatar,
+        "first_name" => user_first_name,
+        "last_name" => user_last_name
       },
       "groups" => formatted_groups,
       "settings" => %{"theme" => "dark", "lang" => "ru"} # если нужно
@@ -97,8 +103,14 @@ defmodule MessengerWeb.SessionChannel do
     })
   end
 
+  # Если: Юзер был внутри конкретного чата, мы восстанавливаем его
+  defp build_state_for_screen("new_chat", params, base_state, user_id) do
+  end
+
   # Если: Юзер был в настройках
   defp build_state_for_screen("settings", _params, base_state, user_id) do
+    user_hour_usage = Messenger.Accounts.get_user_usage_ai_models(user_id, "1_hour")
+
     chats = Chats.list_user_chats(user_id)
     formatted_chats = Enum.map(chats, &Serializer.chat_serialize/1)
 

@@ -30,10 +30,12 @@ defmodule Messenger.Ai.MessageStreaming do
 
   defp run(user_id, chat_id, attrs) do
     context = Map.fetch!(attrs, "context")
+    user_content = Map.fetch!(attrs, "content")
     ai_model = Map.fetch!(attrs, "ai_model")
     ai_profile = Map.fetch!(attrs, "ai_profile")
     summaries = Map.get(attrs, "summaries")
     temp_id = Map.fetch!(attrs, "temp_id")
+    request_id = Map.fetch!(attrs, "request_id")
 
 
     case Registry.register(Messenger.AgentRegistry, {:chat, chat_id}, true) do
@@ -44,9 +46,10 @@ defmodule Messenger.Ai.MessageStreaming do
         )
 
       {:ok, _} ->
+        full_context = context ++ [%{role: "user", content: user_content}]
         system_prompt = ai_profile.prompt.content
-        messages = [%{role: "system", content: system_prompt <> "\n\n" <> summaries} | context]
-
+        messages = [%{role: "system", content: system_prompt <> "\n\n" <> summaries} | full_context]
+        IO.inspect(messages, label: "CONTENT----------------------------------------------------------->")
         all_text =
           messages
           |> Enum.map(fn msg -> msg.content end)
@@ -76,21 +79,27 @@ defmodule Messenger.Ai.MessageStreaming do
         end
 
         client_attrs = %{
-          "ai_profile" => Map.fetch!(attrs, "ai_profile"),
-          "ai_model" => Map.fetch!(attrs, "ai_model").openrouter_model_id,
-          "summaries" => Map.get(attrs, "summaries"),
-          "context" => Map.get(attrs, "context")
+          "ai_profile" => ai_profile,
+          "ai_model" => ai_model.openrouter_model_id,
+          "summaries" => summaries,
+          "context" => full_context
         }
 
         action = Retry.call(fn -> OpenRouterClient.call_streaming(client_attrs, on_token) end)
 
         case action do
+          {:ok, %{content: "", usage: _}} -> # модель не вернула ни одного токена это считаем ошибкой и не сохраняем
+            send_error_to_lobby(user_id, chat_id, ai_model.id, :empty_response)
+
           {:ok, %{content: content, usage: usage}} ->
-            successful_transaction(user_id, chat_id, ai_model, content, usage, temp_id)
+            successful_transaction(user_id, chat_id, ai_model, content, usage, temp_id, request_id)
+
+          {:halted, ""} -> # модель прервали ДО получения хоть какого-нибудь токена, тоже роняем
+            send_error_to_lobby(user_id, chat_id, ai_model.id, :aborted_empty)
 
           {:halted, content} ->
             IO.inspect(content, label: "HALTED <--------------------------------------------------")
-            save_aborted_message(user_id, chat_id, ai_model, content, temp_id, estimated_prompt_tokens, estimated_prompt_cost)
+            save_aborted_message(user_id, chat_id, ai_model, content, temp_id, estimated_prompt_tokens, estimated_prompt_cost, request_id)
 
           {:error, reason} ->
             send_error_to_lobby(user_id, chat_id, ai_model.id, reason)
@@ -98,11 +107,12 @@ defmodule Messenger.Ai.MessageStreaming do
     end
   end
 
-  defp successful_transaction(user_id, chat_id, ai_model, content, usage, temp_id) do
+  defp successful_transaction(user_id, chat_id, ai_model, content, usage, temp_id, request_id) do
     case Chats.create_assistant_message(%{
       user_id: user_id,
       chat_id: chat_id,
       ai_model_id: ai_model.id,
+      request_id: request_id,
       content: content,
       role: "assistant",
       is_aborted: false,
@@ -125,19 +135,19 @@ defmodule Messenger.Ai.MessageStreaming do
     end
   end
 
-  defp save_aborted_message(user_id, chat_id, ai_model, content, temp_id, estimated_prompt_tokens, estimated_prompt_cost) do
+  defp save_aborted_message(user_id, chat_id, ai_model, content, temp_id, estimated_prompt_tokens, estimated_prompt_cost, request_id) do
 
     estimated_completion_tokens = ceil(String.length(content) / 2) || 0
     completion_tokens_dec = Decimal.new(estimated_completion_tokens) || "0.0"
     cost_per_1m_output = ai_model.cost_per_1m_output || Decimal.new(0) || "0.0"
     estimated_cost_completion = Decimal.div(Decimal.mult(cost_per_1m_output, completion_tokens_dec), Decimal.new(1_000_000)) || "0.0"
     estimated_cost_total = Decimal.add(estimated_prompt_cost, estimated_cost_completion)
-    IO.inspect(user_id, label: "Сам метод SaveAbortedMessage<--------------------------------------------------")
 
     case Chats.create_assistant_message(%{
       user_id: user_id,
       chat_id: chat_id,
       ai_model_id: ai_model.id,
+      request_id: request_id,
       content: content,
       role: "assistant",
       tokens_prompt: estimated_prompt_tokens,

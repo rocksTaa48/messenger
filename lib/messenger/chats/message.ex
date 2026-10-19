@@ -9,6 +9,7 @@ defmodule Messenger.Chats.Message do
     field :error, :string
     field :is_aborted, :boolean
     field :is_audio, :boolean
+    field :request_id, :integer
     field :metadata, :map, default: %{}
 
     belongs_to :chat, Messenger.Chats.Chat
@@ -24,12 +25,13 @@ defmodule Messenger.Chats.Message do
       :role,
       :content,
       :chat_id,
+      :request_id,
       :ai_model_id,
       :is_aborted,
       :is_audio,
       :metadata])
     |> validate_required([:role, :content, :chat_id, :ai_model_id])
-    |> validate_inclusion(:role, ["system", "user", "assistant"])
+    |> validate_inclusion(:role, ["user", "assistant"])
     |> validate_inclusion(:status, ["pending", "send", "error"])
     |> validate_length(:content, min: 1, max: 16384)
     |> foreign_key_constraint(:chat_id)

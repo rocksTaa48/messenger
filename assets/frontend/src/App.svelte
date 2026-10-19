@@ -8,7 +8,6 @@
   import Footer from './lib/components/Footer.svelte';
   import Chats from './lib/components/ChatsWindow.svelte';
   import Messenger from './lib/components/MessengerWindow.svelte';
-  import Agents from './lib/components/AgentsWindow.svelte';
   import Settings from './lib/components/SettingsWindow.svelte';
 
   onMount(() => {
@@ -29,7 +28,7 @@
     const targetTab = e.detail; // 'Chats', 'Agents', 'Settings'
     // Здесь надо подумать! переход к созданию чата CreateChat! как это выполнить, модалкой или полноценным окном?
     if (targetTab === 'Chats') appState.goTo({ screen: 'chats' });
-    if (targetTab === 'CreateChat') appState.goTo({ screen: 'inside_chat', params: {} });
+    if (targetTab === 'CreateChat') appState.goTo({ screen: 'new_chat', params: {} });
     if (targetTab === 'Settings') appState.goTo({ screen: 'settings' });
   }
 </script>
@@ -54,7 +53,7 @@
     <!-- Сценарий 3: Полный коннект -->
   {:else}
     <!-- Скрываем отступы футера, если мы внутри чата (inside_chat) или настроек, если это нужно (было 'pb-2' : 'pb-24') -->
-    <div class="w-full flex-1 flex flex-col min-h-0 px-2 pt-1 {currentScreen === 'inside_chat' ? 'pb-2' : 'pb-2'}">
+    <div class="w-full flex-1 flex flex-col min-h-0 px-2 pt-1 {currentScreen === 'inside_chat' || 'new_chat' ? 'pb-2' : 'pb-2'}">
 
       <!-- Индикатор живого real-time сокета -->
       <span class="w-2 h-2 bg-emerald-400 rounded-full animate-ping absolute top-2 right-2"></span>
@@ -70,6 +69,12 @@
         <Messenger on:back={() => appState.goBack()} />
       {/if}
 
+      <!-- Внутри конкретного диалога -->
+      {#if currentScreen === 'new_chat'}
+        <!-- По кнопке Назад вызываем метод appState.goBack() -->
+        <Messenger on:back={() => appState.goBack()} />
+      {/if}
+
       <!-- Настройки -->
       {#if currentScreen === 'settings'}
         <Settings on:back={() => appState.goBack()} />
@@ -78,7 +83,7 @@
     </div>
 
     <!-- Футер. Передаем активную вкладку на основе локального стейта клиента -->
-    {#if currentScreen !== 'inside_chat'}
+    {#if currentScreen !== 'inside_chat' && currentScreen !== 'new_chat'}
       <Footer
               activeTab={currentScreen === 'settings' ? 'Settings' : 'Chats'}
               on:change={handleTabChange}

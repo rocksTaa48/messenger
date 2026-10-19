@@ -17,25 +17,22 @@ defmodule Messenger.Chats do
   Функция get_ai_context это контекст для AI:
   """
   def get_ai_context(chat_id) do
-    # 1) Вытаскиваем хвост из последних 20 сообщений диалог user и assistant
-    recent_messages =
-      Message
-      |> where(chat_id: ^chat_id)
-      |> where([m], m.role in ["user", "assistant"])
-
-      |> order_by(desc: :inserted_at)
-      |> limit(20)
-      |> Repo.all()
-
-      |> Enum.reverse() # Разворачиваем хвост в хронологическом порядке
-
-    # 2) Форматируем хвост для API
-    formatted_tail = Enum.map(recent_messages, fn msg ->
-      %{role: msg.role, content: msg.content}
+    Message
+    |> where([a], a.chat_id == ^chat_id and a.role == "assistant")
+    |> join(:inner, [a], u in Message, on: u.id == a.request_id)
+    |> order_by([a, u], desc: a.inserted_at)
+    |> limit([a, u], 10)
+    |> select([a, u], %{user_msg: u, assistant_msg: a})
+    |> Repo.all()
+    |> Enum.reverse()
+    |> Enum.flat_map(fn %{user_msg: u, assistant_msg: a} ->
+      [
+        %{role: "user", content: u.content},
+        %{role: "assistant", content: a.content}
+      ]
     end)
-
-    formatted_tail
   end
+
 
   @doc"""
   Функция отдает список чатов с ограничением с пагинацией по курсору,
@@ -159,39 +156,48 @@ defmodule Messenger.Chats do
       |> Repo.one()
   end
 
+  def get_message(message_id) do
+    Repo.get(Message, message_id)
+  end
+
   @doc"""
   Блок для получения суммаризации чата
   """
-  def get_messages_each_summary(chat_id, chat_summarized_up_to_message_id) do
+  def count_pairs_for_summary(chat_id, chat_summarized_up_to_message_id) do
     last_id = chat_summarized_up_to_message_id || 0
+
     Message
-      |> where(chat_id: ^chat_id)
-      |> where([m], m.id > ^last_id)
-      |> Repo.aggregate(:count, :id)
+    |> where([a], a.chat_id == ^chat_id)
+    |> where([a], a.role == "assistant")
+    |> where([a], a.id > ^last_id)
+    |> where([a], a.content != "" and a.is_aborted != true)
+    |> join(:inner, [a], u in Message, on: u.id == a.request_id)
+    |> Repo.aggregate(:count, :id)
   end
 
   def get_messages_for_summary(chat_id, chat_summarized_up_to_message_id) do
     last_id = chat_summarized_up_to_message_id || 0
-    last_messages = Message
-                    |> where(chat_id: ^chat_id)
-                    |> where([m], m.id > ^last_id)
-                    |> where([m], m.role in ["user", "assistant"])
-                    |> order_by([asc: :id])
-                    |> Repo.all()
-
-    context = Enum.map(last_messages, fn msg -> %{role: msg.role, content: msg.content} end)
-
+    raw_context =
+      Message
+      |> where([a], a.chat_id == ^chat_id and a.role == "assistant")
+      |> where([a], a.id > ^last_id)
+      |> where([a], a.content != "" and a.is_aborted == false)
+      |> join(:inner, [a], u in Message, on: u.id == a.request_id)
+      |> order_by([a, u], desc: a.id)
+      |> select([a, u], %{user_msg: u, assistant_msg: a})
+      |> Repo.all()
+      |> Enum.reverse()
     context =
-      case context do
-        nil -> nil
-        "" -> nil
-        context -> context
-      end
-
+      Enum.flat_map(raw_context, fn %{user_msg: u, assistant_msg: a} ->
+        [
+          %{role: "user", content: u.content},
+          %{role: "assistant", content: a.content}
+        ]
+      end)
     last_msg_id =
-      case List.last(last_messages) do
-        nil -> nil
-        msg -> msg.id
+      case List.last(raw_context) do
+        nil -> chat_summarized_up_to_message_id
+        %{assistant_msg: a} -> a.id
       end
 
     {:ok, %{context: context, last_msg_id: last_msg_id}}
@@ -214,6 +220,7 @@ defmodule Messenger.Chats do
   def update_chat_title_with_ai(%{
     user_id: user_id,
     chat_id: chat_id,
+    ai_model_id: ai_model_id,
     content: content,
     tokens_prompt: tokens_prompt,
     tokens_completion: tokens_completion,
@@ -233,6 +240,8 @@ defmodule Messenger.Chats do
       "cost_prompt" => cost_prompt,
       "cost_completion" => cost_completion,
       "cost_total" => cost_total,
+      "ai_model_id" => ai_model_id,
+      "metadata" =>  %{"action" => "chat_ai_update_title", "chat_id" => chat_id},
     }))
     |> Repo.transaction()
   end
@@ -384,6 +393,7 @@ defmodule Messenger.Chats do
     user_id: user_id,
     chat_id: chat_id,
     ai_model_id: ai_model_id,
+    request_id: request_id,
     content: content,
     role: role,
     tokens_prompt: tokens_prompt,
@@ -400,6 +410,7 @@ defmodule Messenger.Chats do
     |> Multi.insert(:message, Message.changeset(%Message{}, %{
       "chat_id" => String.to_integer(to_string(chat_id)),
       "ai_model_id" => String.to_integer(to_string(ai_model_id)),
+      "request_id" => request_id,
       "content" => content || "",
       "role" => role,
       "is_aborted" => is_aborted || false,
@@ -413,6 +424,8 @@ defmodule Messenger.Chats do
       "cost_prompt" => cost_prompt,
       "cost_completion" => cost_completion,
       "cost_total" => cost_total,
+      "ai_model_id" => ai_model_id,
+      "metadata" =>  %{"action" => "chat_ai_response", "chat_id" => chat_id},
     }))
 
     |> Multi.update(:chat, Chat.changeset_for_update_last_message_or_model(chat, %{
@@ -457,6 +470,7 @@ defmodule Messenger.Chats do
   def create_summary(%{
     user_id: user_id,
     chat_id: chat_id,
+    ai_model_id: ai_model_id,
     content: content,
     summarized_up_to_message_id: summarized_up_to_message_id,
     tokens_prompt: tokens_prompt,
@@ -482,7 +496,9 @@ defmodule Messenger.Chats do
       "tokens_total" => tokens_total || 0,
       "cost_prompt" => cost_prompt,
       "cost_completion" => cost_completion,
-      "cost_total" => cost_total
+      "cost_total" => cost_total,
+      "ai_model_id" => ai_model_id,
+      "metadata" =>  %{"action" => "chat_ai_summary", "chat_id" => chat_id},
     }))
 
     |> Multi.update(:chat, Chat.changeset_for_update_summary(chat, %{

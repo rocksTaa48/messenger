@@ -46,6 +46,7 @@ defmodule Messenger.Serializer do
       "model_name" => ai_model.model_name,
       "provider" => ai_model.provider,
       "display_name" => ai_model.display_name || "Без имени",
+      "display_color" => ai_model.display_color || "",
       "display_description" => ai_model.display_description || "Без описания",
       "display_icon" => ai_model.display_icon || "",
       "tier" => ai_model.tier || "Отсутствует",

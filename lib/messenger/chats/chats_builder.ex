@@ -4,38 +4,11 @@ defmodule Messenger.Chats.ChatsBuilder do
   alias Messenger.Serializer
   alias Messenger.Ai.{CreateTitleForChat, CreateSummaryForChat, MessageStreaming}
 
-  def create_message_in_chat(current_user, payload) do
-    IO.inspect(payload, label: "Это пайлоад который попал в экшен <--------------------------------------------------")
-    is_audio = Map.get(payload, "is_audio") || false
-    content = Map.get(payload, "text")
-    temp_id = Map.get(payload, "temp_id")
-    chat_id = Map.get(payload, "chat_id")
-    chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
-
-    case build_ai_profile(current_user, payload) do
-      {:ok, %{model: model, profile: profile}} ->
-        create_message_in_existing_chat(current_user, model, profile, chat, content, temp_id, is_audio)
-    end
-  end
-
-  def create_first_message(current_user, payload) do
-    IO.inspect(payload, label: "Это пайлоад который попал в экшен <--------------------------------------------------")
-    is_audio = Map.get(payload, "is_audio") || false
-    content = Map.get(payload, "text")
-    temp_id = Map.get(payload, "temp_id")
-    case build_ai_profile(current_user, payload) do
-      {:ok, %{model: model, profile: profile}} ->
-        create_chat_and_first_message(current_user, model, profile, content, temp_id, is_audio)
-    end
-  end
-
   @doc"""
   Собирает актуальный стейт, приоритетной модели и приоритетных настроек
   для отправки в модель перед генерацией.
   """
   def build_ai_profile(current_user, payload \\ %{}) do
-
-    IO.inspect(payload, label: "ПЭЁЛОАД КОТОРЫЙ ПРИЛЕТЕЛ В БИЛДЕР")
 
     chat_id = Map.get(payload, "chat_id")
     chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
@@ -101,89 +74,6 @@ defmodule Messenger.Chats.ChatsBuilder do
           |> Map.merge(chat_overrides)
 
         {:ok, %{ai_model: current_ai_model, ai_profile: current_ai_profile}}
-    end
-  end
-
-  @doc"""
-  Создает сообщение в первый раз, вместе с чатом и настройками из payload
-  """
-  defp create_chat_and_first_message(user, model, profile, content, temp_id, is_audio) do
-    naming_ai_profile =  AiProfiles.get_default_system_user_ai_profile(user.status, "naming")
-    serialized_profile = Serializer.profile_for_api_serialize(profile)
-    overrides = profile |> Map.take([:temperature, :top_p, :presence_penalty, :frequency_penalty])
-
-    summaries = "" # <-------------------------------- ПОПРАВИТЬ! ВРЕМЕННАЯ МЕРА!!!!
-    IO.inspect(overrides, label: "<_________________CREATE MESSAGE OVERRIDES INSPECT")
-
-
-    case Chats.create_user_message(user.id, content, model.id, is_audio, overrides) do
-      {:ok, %{chat: chat, message: message}} ->
-        CreateTitleForChat.start_generation(user, %{"chat_id" => chat.id, "ai_model" => model, "ai_profile" => naming_ai_profile, "content" => content})
-        context = Chats.get_ai_context(chat.id)
-        MessageStreaming.start_generation(user, %{
-          "chat_id" => chat.id,
-          "ai_model" => model,
-          "ai_profile" => serialized_profile,
-          "context" => context,
-          "summaries" => summaries,
-          "temp_id" => temp_id
-        })
-        {:ok, chat, message}
-      {:error, _failed_step, _failed_value, _changesets} ->
-        {:error, "db_insert_failed"}
-    end
-  end
-
-  @doc"""
-  Создает сообщение уже в существующем чате, настройки подтягиваются из БД
-  """
-  defp create_message_in_existing_chat(user, model, profile, chat, content, temp_id, is_audio) do
-    case Chats.create_user_message(chat.id, model.id, is_audio, content) do
-      {:ok, message} ->
-        context = Chats.get_ai_context(chat.id)
-        summaries = Chats.get_summaries(chat.id)
-        serialized_profile = Serializer.profile_for_api_serialize(profile)
-        MessageStreaming.start_generation(user, %{
-          "chat_id" => chat.id,
-          "ai_model" => model,
-          "ai_profile" => serialized_profile,
-          "context" => context,
-          "summaries" => summaries,
-          "temp_id" => temp_id
-        })
-        start_summary(user, model, chat)
-        {:ok, chat, message}
-      {:error, _changeset} ->
-        {:error, "message_insert_failed"}
-    end
-  end
-
-  @doc"""
-  HELPER start_summary: Запускает процесс суммаризации истории чата, для экономии токенов
-  """
-  defp start_summary(user, model, chat) do
-    count = Chats.get_messages_each_summary(chat.id, chat.summarized_up_to_message_id)
-    if count >= 20 do
-      # получаем системный профиль для суммаризатора
-      ai_profile =  AiProfiles.get_default_system_user_ai_profile(user.status, "summary")
-      # get_messages_for_summary/3 отдает не только последние сообщения от summarized_up_to_message_id,
-      # но и старый summary что бы его не забыть.
-      summary_context = Chats.get_messages_for_summary(chat.id, chat.summarized_up_to_message_id)
-
-      case summary_context do
-        {:ok, %{context: [], last_msg_id: nil}} ->
-          :ok
-        {:ok, %{context: context, last_msg_id: last_msg_id}} ->
-          CreateSummaryForChat.start_generation(user, %{
-            "chat_id" => chat.id,
-            "ai_model" => model,
-            "ai_profile" => ai_profile,
-            "context" => context,
-            "last_msg_id" => last_msg_id
-          })
-        {:error, _} ->
-          :ok
-      end
     end
   end
 end

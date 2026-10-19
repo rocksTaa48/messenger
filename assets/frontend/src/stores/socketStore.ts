@@ -3,7 +3,7 @@
     
     // 1) Узел навигации: четко описывает, где мы и с каким контекстом
     export interface NavigationNode {
-        screen: 'chats' | 'settings' | 'inside_chat';
+        screen: 'chats' | 'settings' | 'inside_chat' | 'new_chat';
         params?: {
             chat_id?: string;
             group_id?: string;
@@ -26,6 +26,9 @@
             role: string;
             status: string;
             ai_model_id: string;
+            photo_url: any;
+            first_name: string;
+            last_name: string;
             profile_overrides?: {
                 temperature?: number | string;
                 top_p?: number | string;
@@ -41,6 +44,7 @@
             display_name: string;
             display_description: string;
             display_icon: string;
+            display_color: string;
             tier: string;
         } | null;
     
@@ -93,7 +97,7 @@
                     frequency_penalty?: number | string;
                 };
                 messages: Array<{
-                    id: number;
+                    id: number | string;
                     content: string;
                     role: string;
                     created_at: string;
@@ -327,7 +331,7 @@
                     const streamingIdx = messages.findIndex(
                         m => m.role === 'assistant' && m.is_streaming
                     );
-    
+
                     if (streamingIdx >= 0) {
                         messages[streamingIdx] = {
                             ...messages[streamingIdx],
@@ -603,6 +607,64 @@
             });
         },
 
+        // ======================= Повторная отправка последнего неудавшегося сообщения =================
+        retryLastMessage() {
+            const state = get(store);
+            const chat = state.active_chat;
+            if (!chat) return;
+            if (chat.awaiting_response) return;   // уже стримится
+
+            // Ищем последнее user-сообщение
+            let lastUserMsg: any = null;
+            for (let i = chat.messages.length - 1; i >= 0; i--) {
+                if (chat.messages[i].role === 'user') {
+                    lastUserMsg = chat.messages[i];
+                    break;
+                }
+            }
+            if (!lastUserMsg) return;
+            if (lastUserMsg.is_pending) return;
+            if (!lastUserMsg.id || String(lastUserMsg.id).startsWith('temp-')) return;
+
+            const userMsgId = lastUserMsg.id;
+            const tempId = `temp-${Date.now()}`;
+
+            // Оптимистично: убираем последний error-assistant (если есть), ставим awaiting
+            update(state => {
+                if (!state.active_chat) return state;
+                const msgs = [...state.active_chat.messages];
+                const lastIdx = msgs.length - 1;
+                if (lastIdx >= 0 && msgs[lastIdx].role === 'assistant' && msgs[lastIdx].error) {
+                    msgs.pop();
+                }
+                return {
+                    ...state,
+                    active_chat: { ...state.active_chat, awaiting_response: true, messages: msgs }
+                };
+            });
+
+            const push = this.send('chat:click_retry_message', {
+                chat_id: chat.id,
+                message_id: userMsgId,
+                temp_id: tempId
+            });
+
+            if (!push) {
+                update(state => state.active_chat ? {
+                    ...state,
+                    active_chat: { ...state.active_chat, awaiting_response: false }
+                } : state);
+                return;
+            }
+
+            push.receive('error', () => {
+                update(state => state.active_chat ? {
+                    ...state,
+                    active_chat: { ...state.active_chat, awaiting_response: false }
+                } : state);
+            });
+        },
+
         // ========================= Отправка голосового сообщения =========================
         sendVoiceMessage(
             blob: Blob,
@@ -775,15 +837,14 @@
                 case 'chats':
                     this.send('base:click_nav_chats', { group_id: node.params?.group_id }); // <-- Отправляемся в лобби чатов
                     break;
+                case 'new_chat':
+                    this.send('chat:click_new', {}); // // <-- Подготавливаем создание чата если не пришел chat_id
+                    break;
                 case 'inside_chat':
-                    if (node.params?.chat_id) {
-                        this.send('chat:click_open', { chat_id: node.params.chat_id }); // <-- Открываем чат
-                    } else {
-                        this.send('chat:click_new', {}); // // <-- Подготавливаем создание чата если не пришел chat_id
-                    }
+                    this.send('chat:click_open', { chat_id: node.params.chat_id }); // <-- Открываем чат
                     break;
                 case 'settings':
-                    this.send('user:get_settings');
+                    this.send('user:click_show_user_usage');
                     break;
             }
         }

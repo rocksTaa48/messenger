@@ -25,7 +25,7 @@ defmodule MessengerWeb.Endpoint do
        at: "/",
        from: :messenger,
        gzip: false,
-       only: ~w(svelte_assets assets fonts images favicon.ico robots.txt index.html)
+       only: ~w(svelte_assets assets fonts images favicon.ico robots.txt index.html tonconnect-manifest.json)
 
          # Code reloading can be explicitly enabled under the
   # :code_reloader configuration of your endpoint.

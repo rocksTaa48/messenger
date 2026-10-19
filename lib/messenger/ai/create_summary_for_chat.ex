@@ -38,6 +38,7 @@ defmodule Messenger.Ai.CreateSummaryForChat do
     case Chats.create_summary(%{
       user_id: user_id,
       chat_id: chat_id,
+      ai_model_id: ai_model.id,
       content: content,
       summarized_up_to_message_id: last_msg_id,
       tokens_prompt: Map.get(usage, "prompt_tokens", 0),

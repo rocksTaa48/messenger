@@ -30,8 +30,10 @@ defmodule MessengerWeb.Actions.BaseActions do
 
     IO.inspect(payload, label: "\n📥 [LOG FROM FRONTEND]")
 
+    current_state = socket.assigns.state || %{}
+
     new_state =
-      socket.assigns.state
+      current_state
 
       |> Map.put("chats_list", formatted_chats)
       |> Map.put("group_id", group_id)

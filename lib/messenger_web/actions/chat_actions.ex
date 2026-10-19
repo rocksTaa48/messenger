@@ -135,6 +135,28 @@ defmodule MessengerWeb.Actions.ChatActions do
   end
 
   @doc"""
+  HAND_RETRY_SEND_MESSAGE:     Ручная переотправка сообщения пользователем
+  """
+  def handle_in("click_retry_message", payload, socket) do
+    current_user = socket.assigns.current_user
+
+    case Chats.MessageSender.retry_message(current_user, payload) do
+      {:ok, chat, message} ->
+        {:reply, {:ok, %{
+          "group_id" => chat.group_id,
+          "chat_id" => chat.id,
+          "message_id" => message.id,
+          "ai_model_id" => to_string(chat.ai_model_id),
+          "profile_overrides" => chat.profile_overrides
+        }}, socket}
+
+      {:error, reason} ->
+        Logger.warning("retry_message failed: #{inspect(reason)}")
+        {:reply, {:error, %{reason: to_string(reason)}}, socket}
+    end
+  end
+
+  @doc"""
   ABORTED_MESSAGE:    Функция останавливает генерацию ответа AI
   """
   def handle_in("click_stop_streaming", payload, socket) do

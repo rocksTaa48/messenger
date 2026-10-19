@@ -11,6 +11,7 @@ defmodule Messenger.Accounts.Transaction do
     field :cost_total, :decimal
     field :metadata, :map
     belongs_to :user, Messenger.Accounts.User
+    belongs_to :ai_model, Messenger.AiProfiles.AiModel
 
     timestamps(type: :utc_datetime)
   end
@@ -18,7 +19,17 @@ defmodule Messenger.Accounts.Transaction do
   @doc false
   def changeset(transaction, attrs) do
     transaction
-    |> cast(attrs, [:user_id, :tokens_prompt, :tokens_completion, :tokens_total, :cost_prompt, :cost_completion, :cost_total, :metadata])
+    |> cast(attrs, [
+      :user_id,
+      :ai_model_id,
+      :tokens_prompt,
+      :tokens_completion,
+      :tokens_total,
+      :cost_prompt,
+      :cost_completion,
+      :cost_total,
+      :metadata
+    ])
     |> validate_required([:user_id, :tokens_total])
   end
 end

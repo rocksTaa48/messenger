@@ -171,7 +171,7 @@ defmodule Messenger.Ai.OpenRouterClient do
              json: build_message_body(ai_model, ai_profile, summaries, context),
              auth: {:bearer, api_key},
              finch: [name: Messenger.OpenRouterFinch],
-             receive_timeout: 30_000,
+             receive_timeout: 60_000,
              headers: [
                {"HTTP-Referer", "https://your-monorepo-app.com"},
                {"X-Title", "Phoenix Svelte Chat"}

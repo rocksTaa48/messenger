@@ -39,6 +39,7 @@ defmodule Messenger.Ai.CreateTitleForChat do
     case Chats.update_chat_title_with_ai(%{
       user_id: user_id,
       chat_id: chat_id,
+      ai_model_id: ai_model.id,
       content: content,
       tokens_prompt: Map.get(usage, "prompt_tokens", 0),
       tokens_completion: Map.get(usage, "completion_tokens", 0),

@@ -2,7 +2,7 @@ defmodule Messenger.Accounts do
 
   import Ecto.Query, warn: false
   alias Messenger.Repo
-  alias Messenger.Accounts.{User, Transaction}
+  alias Messenger.Accounts.{User, Transaction, Balance}
 
   # Функция получения юзера по ID так-же получаем по current_user
   def get_user(id), do: Repo.get(User, id)
@@ -112,99 +112,38 @@ defmodule Messenger.Accounts do
     |> Repo.insert!()
   end
 
-  alias Messenger.Accounts.Balance
-
-  @doc """
-  Returns the list of balances.
-
-  ## Examples
-
-      iex> list_balances()
-      [%Balance{}, ...]
-
+  @doc"""
+  Получение USAGE пользователя по моделям, для отображения в окне статистики
   """
-  def list_balances do
-    Repo.all(Balance)
+  def get_user_usage_ai_models(user_id, period \\ "all") do
+    Transaction
+    |> where([t], t.user_id == ^user_id)
+    |> filter_by_period(period) # фильтр даты
+    |> group_by([t], t.ai_model_id)
+    |> order_by([t], desc: sum(t.tokens_total))
+    |> select([t], %{
+      ai_model_id: t.ai_model_id,
+      tokens: sum(t.tokens_total)
+    })
+    |> Repo.all()
   end
 
-  @doc """
-  Gets a single balance.
+  # Если выбран фильтр "Все время" то дату не фильтруем
+  defp filter_by_period(query, "all"), do: query
 
-  Raises `Ecto.NoResultsError` if the Balance does not exist.
+  # В остальных случаях высчитываем смещение назад от текущего момента
+  defp filter_by_period(query, period) do
+    now = DateTime.utc_now()
 
-  ## Examples
+    start_date =
+      case period do
+        "1_hour"  -> DateTime.shift(now, hour: -1)
+        "1_day"   -> DateTime.shift(now, day: -1)
+        "7_days"  -> DateTime.shift(now, day: -7)
+        "1_month" -> DateTime.shift(now, month: -1)
+        _         -> now # на случай неверного аргумента
+      end
 
-      iex> get_balance!(123)
-      %Balance{}
-
-      iex> get_balance!(456)
-      ** (Ecto.NoResultsError)
-
-  """
-  def get_balance!(id), do: Repo.get!(Balance, id)
-
-  @doc """
-  Creates a balance.
-
-  ## Examples
-
-      iex> create_balance(%{field: value})
-      {:ok, %Balance{}}
-
-      iex> create_balance(%{field: bad_value})
-      {:error, %Ecto.Changeset{}}
-
-  """
-  def create_balance(attrs) do
-    %Balance{}
-    |> Balance.changeset(attrs)
-    |> Repo.insert()
-  end
-
-  @doc """
-  Updates a balance.
-
-  ## Examples
-
-      iex> update_balance(balance, %{field: new_value})
-      {:ok, %Balance{}}
-
-      iex> update_balance(balance, %{field: bad_value})
-      {:error, %Ecto.Changeset{}}
-
-  """
-  def update_balance(%Balance{} = balance, attrs) do
-    balance
-    |> Balance.changeset(attrs)
-    |> Repo.update()
-  end
-
-  @doc """
-  Deletes a balance.
-
-  ## Examples
-
-      iex> delete_balance(balance)
-      {:ok, %Balance{}}
-
-      iex> delete_balance(balance)
-      {:error, %Ecto.Changeset{}}
-
-  """
-  def delete_balance(%Balance{} = balance) do
-    Repo.delete(balance)
-  end
-
-  @doc """
-  Returns an `%Ecto.Changeset{}` for tracking balance changes.
-
-  ## Examples
-
-      iex> change_balance(balance)
-      %Ecto.Changeset{data: %Balance{}}
-
-  """
-  def change_balance(%Balance{} = balance, attrs \\ %{}) do
-    Balance.changeset(balance, attrs)
+    where(query, [t], t.inserted_at >= ^start_date)
   end
 end
