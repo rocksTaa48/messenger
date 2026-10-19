@@ -15,7 +15,15 @@
 
   type IconComponent = typeof BarChart3;
   type Row = { label: string; icon: IconComponent; onClick: () => void };
-  type RawUsage = { ai_model_id: number | string; tokens: number };
+
+  // Бэк отдаёт credits (Decimal → JSON-строка) + cost_usd/tokens для админки.
+  // Фронт берёт ТОЛЬКО credits — о USD не знает.
+  type RawUsage = {
+    ai_model_id: number | string;
+    credits: string | number;
+    cost_usd?: string | number;
+    tokens?: number | string;
+  };
 
   const PERIODS = [
     { value: '1_hour',  label: 'Last hour' },
@@ -64,7 +72,6 @@
     loadUsage(period);
   }
 
-  // Ключевое: id нужен, чтобы {#each} переиспользовал DOM по модели, а не по индексу.
   $: usage = rawUsage.map((u) => {
     const id = String(u.ai_model_id);
     const model = aiModelsById[id];
@@ -72,21 +79,43 @@
       id,
       name: model?.display_name ?? `Model #${u.ai_model_id}`,
       color: model?.display_color ? `#${model.display_color}` : '#888888',
-      tokens: u.tokens,
+      credits: Number(u.credits) || 0,
     };
   });
 
   const CIRC = 2 * Math.PI * 40;
-  const nf = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
-  const fmt = (n: number) => nf.format(n);
 
-  $: total = usage.reduce((s, m) => s + m.tokens, 0);
+  // Форматтер для кредитов — единая единица измерения на всём UI.
+  //  0            → "0"
+  //  0.60         → "0.60"   (Whisper-минута)
+  //  12.34        → "12.34"
+  //  83           → "83"
+  //  1,240        → "1,240"
+  //  12,400       → "12.4k"  (compact — чтобы влезло в донат)
+  function fmtCredits(n: number): string {
+    if (!n || !isFinite(n) || n <= 0) return '0';
+    if (n >= 10_000) {
+      return new Intl.NumberFormat('en', {
+        notation: 'compact',
+        maximumFractionDigits: 1,
+      }).format(n);
+    }
+    if (n >= 1) {
+      return Number.isInteger(n)
+              ? n.toLocaleString('en-US', { maximumFractionDigits: 0 })
+              : parseFloat(n.toFixed(2)).toString();
+    }
+    return n.toFixed(2);
+  }
+
+  // Главная метрика — кредиты. Whisper сюда попадает естественно (credits > 0, tokens = 0).
+  $: totalCredits = usage.reduce((s, m) => s + m.credits, 0);
 
   $: segments = (() => {
     const gap = 2.5;
     let cursor = 0;
     return usage.map((m) => {
-      const frac = total > 0 ? m.tokens / total : 0;
+      const frac = totalCredits > 0 ? m.credits / totalCredits : 0;
       const full = frac * CIRC;
       const seg = {
         ...m,
@@ -110,7 +139,7 @@
     { label: 'Send Feedback',  icon: MessageSquare, onClick: () => console.log('Feedback') },
   ];
 
-  const onEditProfile  = () => console.log('Edit profile');
+  const onEditProfile = () => console.log('Edit profile');
 
   async function handlePayRequest(event: CustomEvent<{ method: string }>) {
     const method = event.detail.method;
@@ -144,7 +173,7 @@
       <div class="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-3 space-y-3">
 
         <div class="flex items-center justify-between gap-2">
-          <div class="text-sm font-medium">Tokens burned</div>
+          <div class="text-sm font-medium">Credits used</div>
           <select
                   bind:value={period}
                   class="bg-white/[0.05] border border-white/[0.08] rounded-lg pl-2 pr-6 py-1 text-xs text-gray-300 outline-none cursor-pointer hover:bg-white/[0.08] focus:border-[#2481cc]/60 transition-colors appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%239ca3af%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><polyline points=%226 9 12 15 18 9%22/></svg>')] bg-no-repeat bg-[right_0.4rem_center]"
@@ -155,10 +184,6 @@
           </select>
         </div>
 
-        <!-- Пустой стейт — только когда загрузились и данных нет.
-             Пока грузимся — оставляем ring на месте, чтобы не было прыжка. -->
-        <!-- Пустой стейт убран. Ring рисуется всегда.
-             Если данных нет — серый круг + 0 в центре. -->
         <div class="flex items-center gap-4 transition-opacity duration-300"
              class:opacity-50={isLoading}>
           <div class="relative w-28 h-28 shrink-0">
@@ -181,10 +206,10 @@
             </svg>
 
             <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-      <span class="text-base font-semibold tabular-nums leading-none transition-all duration-500">
-        {fmt(total)}
-      </span>
-              <span class="text-[9px] uppercase tracking-wider text-gray-500 mt-0.5">tokens</span>
+              <span class="text-base font-semibold tabular-nums leading-none transition-all duration-500">
+                {fmtCredits(totalCredits)}
+              </span>
+              <span class="text-[9px] uppercase tracking-wider text-gray-500 mt-0.5">credits</span>
             </div>
           </div>
 
@@ -193,7 +218,7 @@
               <div class="flex items-center gap-2 text-xs" in:fade={{ duration: 300 }}>
                 <span class="w-2 h-2 rounded-full shrink-0" style="background:{seg.color}"></span>
                 <span class="flex-1 text-gray-300 truncate">{seg.name}</span>
-                <span class="text-gray-500 tabular-nums shrink-0">{fmt(seg.tokens)}</span>
+                <span class="text-gray-500 tabular-nums shrink-0">{fmtCredits(seg.credits)}</span>
               </div>
             {/each}
           </div>

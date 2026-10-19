@@ -1,6 +1,7 @@
 defmodule Messenger.Ai.MessageTranscript do
   alias Messenger.Ai.{Retry, OpenRouterClient}
   alias Messenger.Chats
+  alias Messenger.Accounts
   require Logger
 
   @doc """
@@ -34,6 +35,14 @@ defmodule Messenger.Ai.MessageTranscript do
     chat_id = Map.get(attrs, "chat_id")
     temp_id = Map.get(attrs, "temp_id")
     profile_overrides = Map.get(attrs, "profile_overrides")
+    ai_transcript_model = Map.get(attrs, "ai_transcript_model")
+
+    Accounts.record_transaction(%{
+      "user_id" => current_user.id,
+      "ai_model_id" => ai_transcript_model.id,
+      "cost_total" => Map.get(usage, "cost", 0.0),
+      "metadata" => %{"action" => "chat_transcript_voice", "chat_id" => chat_id, "time_seconds" => Map.get(usage, "seconds", 0.0)}
+    })
 
     ai_model_id =
       case Map.get(attrs, "ai_model_id") do
@@ -41,7 +50,7 @@ defmodule Messenger.Ai.MessageTranscript do
         id when is_integer(id) -> id
         id when is_binary(id) -> String.to_integer(id)
       end
-      # ДОДЕЛАЙ ОТДАЧУ!!!! после аудио не отдается model_id top_p temperature и прочая хуета!
+
     case Chats.MessageSender.create_message(current_user,
            %{"text" => content,
              "chat_id" => chat_id,

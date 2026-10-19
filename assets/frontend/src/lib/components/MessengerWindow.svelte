@@ -66,7 +66,6 @@
     // === Рефы ===
     let scrollContainer: HTMLDivElement;
     let textareaElement: HTMLTextAreaElement;
-    let topSentinel: HTMLDivElement;
 
     // === Состояние UI ===
     let newMessageText = "";
@@ -74,12 +73,17 @@
     // === Скролл / подгрузка ===
     let isLoadingMoreMessages = false;
     let isPaginationEnabled = false;
-    let observer: IntersectionObserver | null = null;
     let hasInitialScrollDone = false;
     let isNearBottom = true;
-    let scrollState: { oldScrollHeight: number; expectedFirstId: string | number | null; } | null = null;
+    let scrollState: { expectedFirstId: string | number | null; } | null = null;
     let prevMessagesCount = 0;
     let prevLastId: string | number | null = null;
+
+    // Триггер подгрузки: порог входа в зону (переход, а не состояние).
+    // Плюс запоминаем высоту до загрузки, чтобы после ответа компенсировать scrollTop.
+    const TRIGGER_THRESHOLD = 200;
+    let wasInTriggerZone = false;
+    let scrollHeightBeforeLoad = 0;
 
     // ================================================= АУДИОЗАПИСЬ ==================================================
     const MAX_RECORDING_SECONDS = 60;
@@ -226,27 +230,31 @@
 
     function handleScroll() {
         if (!scrollContainer) return;
-        const distanceFromBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
-        isNearBottom = distanceFromBottom < 150;
-    }
+        const st = scrollContainer.scrollTop;
+        isNearBottom = (scrollContainer.scrollHeight - st - scrollContainer.clientHeight) < 150;
 
-    function setupObserver() {
-        if (!scrollContainer || !topSentinel || observer) return;
-        observer = new IntersectionObserver(
-            (entries) => {
-                if (entries[0].isIntersecting && isPaginationEnabled && !isLoadingMoreMessages && activeChat?.has_more_messages) {
-                    loadMoreMessages();
-                }
-            },
-            { root: scrollContainer, rootMargin: '720px 0px 0px 0px', threshold: 0 }
-        );
-        observer.observe(topSentinel);
+        const inTriggerZone = st < TRIGGER_THRESHOLD;
+        if (!inTriggerZone) {
+            wasInTriggerZone = false;
+        }
+
+        if (
+            inTriggerZone &&
+            !wasInTriggerZone &&
+            isPaginationEnabled &&
+            !isLoadingMoreMessages &&
+            activeChat?.has_more_messages
+        ) {
+            wasInTriggerZone = true;
+            loadMoreMessages();
+        }
     }
 
     function loadMoreMessages() {
         if (!scrollContainer || !activeChat?.has_more_messages || !isPaginationEnabled || isLoadingMoreMessages) return;
         isLoadingMoreMessages = true;
-        scrollState = { oldScrollHeight: scrollContainer.scrollHeight, expectedFirstId: messages[0]?.id ?? null };
+        scrollHeightBeforeLoad = scrollContainer.scrollHeight;
+        scrollState = { expectedFirstId: messages[0]?.id ?? null };
         const timeoutId = setTimeout(() => {
             if (isLoadingMoreMessages) { isLoadingMoreMessages = false; scrollState = null; }
         }, 10000);
@@ -256,8 +264,18 @@
     }
 
     onMount(() => {
-        setupObserver();
-        return () => { if (observer) observer.disconnect(); };
+        const vv = window.visualViewport;
+        const onVV = () => {
+            const wasNearBottom = isNearBottom;
+            requestAnimationFrame(() => {
+                if (wasNearBottom) scrollToBottomImmediate();
+            });
+        };
+        vv?.addEventListener('resize', onVV);
+
+        return () => {
+            vv?.removeEventListener('resize', onVV);
+        };
     });
 
     onDestroy(() => {
@@ -266,6 +284,7 @@
         if (recordingTimer) clearInterval(recordingTimer);
         if (audioPlayer) { audioPlayer.pause(); audioPlayer = null; }
         if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
+        textareaElement?.blur();
     });
 
     beforeUpdate(() => {
@@ -279,13 +298,21 @@
             scrollToBottomImmediate();
             hasInitialScrollDone = true;
             isPaginationEnabled = true;
+            // Если контента меньше экрана — подгружаем сразу, не дожидаясь свайпа.
+            handleScroll();
             return;
         }
         if (isLoadingMoreMessages && scrollState) {
             const currentFirstId = messages[0]?.id ?? null;
             if (currentFirstId !== scrollState.expectedFirstId) {
-                const heightDiff = scrollContainer.scrollHeight - scrollState.oldScrollHeight;
-                if (heightDiff > 0) scrollContainer.scrollTop += heightDiff;
+                // Подгрузка завершена. Компенсируем scrollTop на высоту нового контента:
+                // viewport остаётся на тех сообщениях, что юзер видел, а новая пачка
+                // оказывается сверху. Чтобы подгрузить следующую — нужно снова
+                // доскроллить вверх (войти в trigger zone).
+                const heightDiff = scrollContainer.scrollHeight - scrollHeightBeforeLoad;
+                if (heightDiff > 0) {
+                    scrollContainer.scrollTop += heightDiff;
+                }
                 scrollState = null;
                 isLoadingMoreMessages = false;
             }
@@ -430,12 +457,11 @@
     <div
             bind:this={scrollContainer}
             on:scroll={handleScroll}
-            class="flex-1 scrollbar-none {isLoadingMoreMessages ? 'overflow-y-hidden' : 'overflow-y-auto'}"
-            style="overflow-anchor: none; overscroll-behavior-y: contain;"
+            class="flex-1 scrollbar-none overflow-y-auto"
+            style="overscroll-behavior-y: contain; overflow-anchor: none;"
     >
-        <!-- pt-[68px] — под хедер; pb-[...] — под футер (его высота + safe-area) -->
         <div class="px-3 pt-[68px] pb-[calc(72px+env(safe-area-inset-bottom,0px))] flex flex-col gap-2">
-            <div bind:this={topSentinel} class="h-2 w-full flex-shrink-0">
+            <div class="h-2 w-full flex-shrink-0">
                 {#if isLoadingMoreMessages && activeChat?.has_more_messages}
                     <div class="flex justify-center py-3">
                         <span class="text-gray-500 text-xs animate-pulse">Загрузка истории...</span>

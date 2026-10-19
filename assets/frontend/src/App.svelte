@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   // Импортируем наш единый подправленный монолит-стор
   import { appState } from './stores/socketStore';
   import { initTMA } from './lib/tma/init';
@@ -10,14 +10,52 @@
   import Messenger from './lib/components/MessengerWindow.svelte';
   import Settings from './lib/components/SettingsWindow.svelte';
 
+  // Высота вьюпорта с учётом виртуальной клавиатуры.
+  // 0 — означает "ещё не инициализировано", в этом случае используем 100dvh через CSS.
+  let viewportHeight = 0;
+
   onMount(() => {
     initTMA();
     const tgWebApp = (window as any).Telegram?.WebApp;
     const initData = tgWebApp?.initData || "test_init_data_for_dev";
     tgWebApp?.ready();
-
-    // Запускаем сессию через наш новый стор
     appState.initSession(initData);
+
+    const vv = window.visualViewport;
+
+    const isEditableFocused = () => {
+      const el = document.activeElement;
+      return el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement;
+    };
+
+    const updateHeight = () => {
+      viewportHeight = isEditableFocused()
+              ? (vv?.height ?? window.innerHeight)   // клавиатура открыта — сжимаемся под неё
+              : window.innerHeight;                   // клавиатура не нужна — полная высота
+    };
+
+    // Клавиатура открывается/закрывается — пересчитываем
+    const onVV = () => updateHeight();
+    // Фокус появился/ушёл — пересчитываем немедленно, не дожидаясь vv.resize
+    const onFocus = () => updateHeight();
+    // На всякий случай: поворот экрана и т.п.
+    const onResize = () => updateHeight();
+
+    vv?.addEventListener('resize', onVV);
+    vv?.addEventListener('scroll', onVV);
+    window.addEventListener('focusin', onFocus);
+    window.addEventListener('focusout', onFocus);
+    window.addEventListener('resize', onResize);
+
+    updateHeight();
+
+    return () => {
+      vv?.removeEventListener('resize', onVV);
+      vv?.removeEventListener('scroll', onVV);
+      window.removeEventListener('focusin', onFocus);
+      window.removeEventListener('focusout', onFocus);
+      window.removeEventListener('resize', onResize);
+    };
   });
 
   // Логика скрытия футера: читаем состояние экрана прямо из локального nav_context
@@ -26,15 +64,19 @@
   // Перехват кликов из Футера: теперь навигацией рулит клиент через goTo!
   function handleTabChange(e: CustomEvent<string>) {
     const targetTab = e.detail; // 'Chats', 'Agents', 'Settings'
-    // Здесь надо подумать! переход к созданию чата CreateChat! как это выполнить, модалкой или полноценным окном?
     if (targetTab === 'Chats') appState.goTo({ screen: 'chats' });
     if (targetTab === 'CreateChat') appState.goTo({ screen: 'new_chat', params: {} });
     if (targetTab === 'Settings') appState.goTo({ screen: 'settings' });
   }
 </script>
 
-<!-- Основной контейнер с системным фоном -->
-<main class="fixed inset-0 flex flex-col bg-tg-bg text-tg-text overflow-hidden justify-center items-center">
+<!-- Основной контейнер с системным фоном.
+     height задаётся из visualViewport.height — так main сжимается вместе с клавиатурой
+     и футер с инпутом плавно поднимается, без скачка документа. -->
+<main
+        class="fixed top-0 left-0 right-0 flex flex-col bg-tg-bg text-tg-text overflow-hidden justify-center items-center"
+        style="height: {viewportHeight > 0 ? viewportHeight + 'px' : '100dvh'};"
+>
 
   <!-- Сценарий 1: Подключение или реконнект -->
   {#if !$appState || $appState.status === 'connecting'}
@@ -53,7 +95,7 @@
     <!-- Сценарий 3: Полный коннект -->
   {:else}
     <!-- Скрываем отступы футера, если мы внутри чата (inside_chat) или настроек, если это нужно (было 'pb-2' : 'pb-24') -->
-    <div class="w-full flex-1 flex flex-col min-h-0 px-2 pt-1 {currentScreen === 'inside_chat' || 'new_chat' ? 'pb-2' : 'pb-2'}">
+    <div class="w-full flex-1 flex flex-col min-h-0 px-2 pt-1 pb-2">
 
       <!-- Индикатор живого real-time сокета -->
       <span class="w-2 h-2 bg-emerald-400 rounded-full animate-ping absolute top-2 right-2"></span>
@@ -69,7 +111,7 @@
         <Messenger on:back={() => appState.goBack()} />
       {/if}
 
-      <!-- Внутри конкретного диалога -->
+      <!-- Новый чат -->
       {#if currentScreen === 'new_chat'}
         <!-- По кнопке Назад вызываем метод appState.goBack() -->
         <Messenger on:back={() => appState.goBack()} />

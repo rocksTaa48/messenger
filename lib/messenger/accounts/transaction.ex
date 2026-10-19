@@ -30,6 +30,6 @@ defmodule Messenger.Accounts.Transaction do
       :cost_total,
       :metadata
     ])
-    |> validate_required([:user_id, :tokens_total])
+    |> validate_required([:user_id, :ai_model_id])
   end
 end

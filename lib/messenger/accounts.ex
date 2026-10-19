@@ -3,6 +3,7 @@ defmodule Messenger.Accounts do
   import Ecto.Query, warn: false
   alias Messenger.Repo
   alias Messenger.Accounts.{User, Transaction, Balance}
+  alias Messenger.CreditConverter
 
   # Функция получения юзера по ID так-же получаем по current_user
   def get_user(id), do: Repo.get(User, id)
@@ -123,9 +124,18 @@ defmodule Messenger.Accounts do
     |> order_by([t], desc: sum(t.tokens_total))
     |> select([t], %{
       ai_model_id: t.ai_model_id,
+      cost: sum(t.cost_total),
       tokens: sum(t.tokens_total)
     })
     |> Repo.all()
+    |> Enum.map(fn row ->
+    %{
+      ai_model_id: row.ai_model_id,
+      credits: CreditConverter.to_api(CreditConverter.usd_to_credits(row.cost)),  # ← конвертер из USD в кредиты
+      tokens: row.tokens || 0,
+      cost_usd: Decimal.to_string(row.cost)
+    }
+    end)
   end
 
   # Если выбран фильтр "Все время" то дату не фильтруем
