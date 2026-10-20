@@ -97,7 +97,7 @@ defmodule MessengerWeb.SessionChannel do
     |> Map.put("active_chat", %{
       "id" => chat_id,
       "group_id" => chat.group_id,
-      "ai_model_id" => chat.ai_model_id,
+      "ai_model_id" => to_string(chat.ai_model_id),
       "messages" => active_chat_data,
       "has_more_messages" => length(active_chat_data) >= 15
     })
