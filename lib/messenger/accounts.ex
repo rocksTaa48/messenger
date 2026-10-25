@@ -2,7 +2,7 @@ defmodule Messenger.Accounts do
 
   import Ecto.Query, warn: false
   alias Messenger.Repo
-  alias Messenger.Accounts.{User, Transaction, Balance}
+  alias Messenger.Accounts.{User, Transaction, Balance, Payment, Ledger}
   alias Messenger.CreditConverter
 
   # Функция получения юзера по ID так-же получаем по current_user
@@ -155,5 +155,20 @@ defmodule Messenger.Accounts do
       end
 
     where(query, [t], t.inserted_at >= ^start_date)
+  end
+
+  @doc"""
+  Создание инвойса для ClusterPay
+  """
+  def create_clusterpay_invoice(attrs) do
+    %Payment{}
+    |> Payment.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def payment_update(%Payment{} = payment, attrs) do
+    payment
+    |> Payment.changeset(attrs)
+    |> Repo.update()
   end
 end

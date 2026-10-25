@@ -39,8 +39,6 @@ defmodule MessengerWeb.SessionChannel do
         "id" => current_user.id,
         "telegram_id" => current_user.telegram_id,
         "username" => current_user.username,
-        "first_name" => current_user.first_name,
-        "last_name" => current_user.first_name,
         "role" => current_user.role,
         "photo_url" => user_avatar,
         "first_name" => user_first_name,
@@ -183,6 +181,24 @@ defmodule MessengerWeb.SessionChannel do
       chat_id: to_string(chat_id),
       reason: reason
     })
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:payment_invoice_created, payload}, socket) do
+    push(socket, "payment:invoice_created", payload)
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:payment_error, payload}, socket) do
+    push(socket, "payment:error", payload)
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:payment_completed, payload}, socket) do
+    push(socket, "payment:completed", payload)
     {:noreply, socket}
   end
 

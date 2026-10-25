@@ -62,4 +62,42 @@ defmodule Messenger.AccountsFixtures do
 
     balance
   end
+
+  @doc """
+  Generate a payment.
+  """
+  def payment_fixture(attrs \\ %{}) do
+    {:ok, payment} =
+      attrs
+      |> Enum.into(%{
+        amount_credits: "120.5",
+        amount_original: "120.5",
+        currency_original: "some currency_original",
+        external_order_id: "some external_order_id",
+        metadata: %{},
+        provider: "some provider",
+        status: "some status",
+        tx_hash: "some tx_hash"
+      })
+      |> Messenger.Accounts.create_payment()
+
+    payment
+  end
+
+  @doc """
+  Generate a ledger.
+  """
+  def ledger_fixture(attrs \\ %{}) do
+    {:ok, ledger} =
+      attrs
+      |> Enum.into(%{
+        amount_credits: "some amount_credits",
+        description: "some description",
+        metadata: %{},
+        type: "some type"
+      })
+      |> Messenger.Accounts.create_ledger()
+
+    ledger
+  end
 end

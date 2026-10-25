@@ -14,6 +14,18 @@ config :messenger, MessengerWeb.Endpoint,
          tailwind: {Tailwind, :install_and_run, [:messenger, ~w(--watch)]}
        ]
 
+config :messenger, :clusterpay,
+       api_key: System.get_env("CLUSTERPAY_API_KEY"),
+       base_url: System.get_env("CLUSTERPAY_BASE_URL"),
+       callback_url: "https://simplemessenger.serveousercontent.com/webhooks/clusterpay",
+       redirect_url: "https://simplemessenger.serveousercontent.com/payment/success",
+       wallets: %{
+         "trc20" => "TLX5vHgzjM6PQKAWhoCUtVAMmf7XYeuAGC",
+         "poly" => "0x0031066eA12Dd483A3096f3741254B847c918c7b",
+         "bep20" => "0x0031066eA12Dd483A3096f3741254B847c918c7b",
+         "arb" => "0x0031066eA12Dd483A3096f3741254B847c918c7b",
+       }
+
 # ## SSL Support
 #
 # In order to use HTTPS in development, a self-signed

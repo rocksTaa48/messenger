@@ -188,4 +188,132 @@ defmodule Messenger.AccountsTest do
       assert %Ecto.Changeset{} = Accounts.change_balance(balance)
     end
   end
+
+  describe "payments" do
+    alias Messenger.Accounts.Payment
+
+    import Messenger.AccountsFixtures
+
+    @invalid_attrs %{status: nil, metadata: nil, provider: nil, external_order_id: nil, tx_hash: nil, amount_original: nil, currency_original: nil, amount_credits: nil}
+
+    test "list_payments/0 returns all payments" do
+      payment = payment_fixture()
+      assert Accounts.list_payments() == [payment]
+    end
+
+    test "get_payment!/1 returns the payment with given id" do
+      payment = payment_fixture()
+      assert Accounts.get_payment!(payment.id) == payment
+    end
+
+    test "create_payment/1 with valid data creates a payment" do
+      valid_attrs = %{status: "some status", metadata: %{}, provider: "some provider", external_order_id: "some external_order_id", tx_hash: "some tx_hash", amount_original: "120.5", currency_original: "some currency_original", amount_credits: "120.5"}
+
+      assert {:ok, %Payment{} = payment} = Accounts.create_payment(valid_attrs)
+      assert payment.status == "some status"
+      assert payment.metadata == %{}
+      assert payment.provider == "some provider"
+      assert payment.external_order_id == "some external_order_id"
+      assert payment.tx_hash == "some tx_hash"
+      assert payment.amount_original == Decimal.new("120.5")
+      assert payment.currency_original == "some currency_original"
+      assert payment.amount_credits == Decimal.new("120.5")
+    end
+
+    test "create_payment/1 with invalid data returns error changeset" do
+      assert {:error, %Ecto.Changeset{}} = Accounts.create_payment(@invalid_attrs)
+    end
+
+    test "update_payment/2 with valid data updates the payment" do
+      payment = payment_fixture()
+      update_attrs = %{status: "some updated status", metadata: %{}, provider: "some updated provider", external_order_id: "some updated external_order_id", tx_hash: "some updated tx_hash", amount_original: "456.7", currency_original: "some updated currency_original", amount_credits: "456.7"}
+
+      assert {:ok, %Payment{} = payment} = Accounts.update_payment(payment, update_attrs)
+      assert payment.status == "some updated status"
+      assert payment.metadata == %{}
+      assert payment.provider == "some updated provider"
+      assert payment.external_order_id == "some updated external_order_id"
+      assert payment.tx_hash == "some updated tx_hash"
+      assert payment.amount_original == Decimal.new("456.7")
+      assert payment.currency_original == "some updated currency_original"
+      assert payment.amount_credits == Decimal.new("456.7")
+    end
+
+    test "update_payment/2 with invalid data returns error changeset" do
+      payment = payment_fixture()
+      assert {:error, %Ecto.Changeset{}} = Accounts.update_payment(payment, @invalid_attrs)
+      assert payment == Accounts.get_payment!(payment.id)
+    end
+
+    test "delete_payment/1 deletes the payment" do
+      payment = payment_fixture()
+      assert {:ok, %Payment{}} = Accounts.delete_payment(payment)
+      assert_raise Ecto.NoResultsError, fn -> Accounts.get_payment!(payment.id) end
+    end
+
+    test "change_payment/1 returns a payment changeset" do
+      payment = payment_fixture()
+      assert %Ecto.Changeset{} = Accounts.change_payment(payment)
+    end
+  end
+
+  describe "ledgers" do
+    alias Messenger.Accounts.Ledger
+
+    import Messenger.AccountsFixtures
+
+    @invalid_attrs %{type: nil, description: nil, metadata: nil, amount_credits: nil}
+
+    test "list_ledgers/0 returns all ledgers" do
+      ledger = ledger_fixture()
+      assert Accounts.list_ledgers() == [ledger]
+    end
+
+    test "get_ledger!/1 returns the ledger with given id" do
+      ledger = ledger_fixture()
+      assert Accounts.get_ledger!(ledger.id) == ledger
+    end
+
+    test "create_ledger/1 with valid data creates a ledger" do
+      valid_attrs = %{type: "some type", description: "some description", metadata: %{}, amount_credits: "some amount_credits"}
+
+      assert {:ok, %Ledger{} = ledger} = Accounts.create_ledger(valid_attrs)
+      assert ledger.type == "some type"
+      assert ledger.description == "some description"
+      assert ledger.metadata == %{}
+      assert ledger.amount_credits == "some amount_credits"
+    end
+
+    test "create_ledger/1 with invalid data returns error changeset" do
+      assert {:error, %Ecto.Changeset{}} = Accounts.create_ledger(@invalid_attrs)
+    end
+
+    test "update_ledger/2 with valid data updates the ledger" do
+      ledger = ledger_fixture()
+      update_attrs = %{type: "some updated type", description: "some updated description", metadata: %{}, amount_credits: "some updated amount_credits"}
+
+      assert {:ok, %Ledger{} = ledger} = Accounts.update_ledger(ledger, update_attrs)
+      assert ledger.type == "some updated type"
+      assert ledger.description == "some updated description"
+      assert ledger.metadata == %{}
+      assert ledger.amount_credits == "some updated amount_credits"
+    end
+
+    test "update_ledger/2 with invalid data returns error changeset" do
+      ledger = ledger_fixture()
+      assert {:error, %Ecto.Changeset{}} = Accounts.update_ledger(ledger, @invalid_attrs)
+      assert ledger == Accounts.get_ledger!(ledger.id)
+    end
+
+    test "delete_ledger/1 deletes the ledger" do
+      ledger = ledger_fixture()
+      assert {:ok, %Ledger{}} = Accounts.delete_ledger(ledger)
+      assert_raise Ecto.NoResultsError, fn -> Accounts.get_ledger!(ledger.id) end
+    end
+
+    test "change_ledger/1 returns a ledger changeset" do
+      ledger = ledger_fixture()
+      assert %Ecto.Changeset{} = Accounts.change_ledger(ledger)
+    end
+  end
 end

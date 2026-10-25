@@ -1,9 +1,5 @@
 defmodule Messenger.Ai.OpenRouterClient do
   alias Messenger.Ai.{Error, Streamer}
-  require Logger
-
-
-
 
   @doc"""
   Вызов функции ТРАНСКРИПЦИИ речи в текст
