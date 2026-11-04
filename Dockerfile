@@ -60,7 +60,7 @@ RUN apk add --no-cache libstdc++ openssl ncurses-libs tzdata
 WORKDIR /messenger
 
 # Безопасность: запускаем приложение от имени системного пользователя 'nobody'
-RUN chown nobody /app
+RUN chown nobody /messenger
 USER nobody
 
 # Копируем собранный релиз из Второго этапа

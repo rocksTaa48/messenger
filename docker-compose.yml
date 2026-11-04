@@ -31,8 +31,6 @@ services:
       # Переменные для init.sql для создания пользователей, владельцев баз
       ELIXIR_DB_USER: ${ELIXIR_DB_USER}
       ELIXIR_DB_PASSWORD: ${ELIXIR_DB_PASSWORD}
-      CLUSTER_PAY_DB_USER: ${CLUSTER_PAY_DB_USER}
-      CLUSTER_PAY_DB_PASSWORD: ${CLUSTER_PAY_DB_PASSWORD}
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - db_data:/var/lib/postgresql
