@@ -17,4 +17,3 @@ echo "=== Running Ecto Migrations ==="
 
 echo "=== Starting Phoenix Server ==="
 exec /messenger/bin/messenger start
-
