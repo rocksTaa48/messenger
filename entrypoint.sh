@@ -4,6 +4,9 @@ set -e
 # Ждем базу
 while ! nc -z postgres 5432; do sleep 0.5; done
 
+echo "=== Creating Database if not exists ==="
+/messenger/bin/messenger eval "Messenger.Release.create()"
+
 echo "=== Running Ecto Migrations ==="
 /messenger/bin/messenger eval "Messenger.Release.migrate()"
 

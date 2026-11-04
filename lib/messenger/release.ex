@@ -1,6 +1,19 @@
 defmodule Messenger.Release do
   @app :messenger
 
+  # Замена команды mix ecto.create
+  def create do
+    load_app()
+    for repo <- repos() do
+      # Ecto.Storage.up создает базу данных, если её ещё нет
+      case repo.__adapter__().storage_up(repo.config()) do
+        :ok -> IO.puts("=== Database for #{inspect(repo)} created successfully ===")
+        {:error, :already_up} -> IO.puts("=== Database for #{inspect(repo)} already exists ===")
+        {:error, term} -> IO.puts("=== Failed to create database for #{inspect(repo)}: #{inspect(term)} ===")
+      end
+    end
+  end
+
   # Замена команды mix ecto.migrate
   def migrate do
     load_app()
