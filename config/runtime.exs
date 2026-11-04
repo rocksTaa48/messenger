@@ -47,7 +47,7 @@ if config_env() in [:dev, :prod] do
            port: port
          ],
          secret_key_base: secret_key_base,
-         server: System.get_env("PHX_SERVER") || config_env() == :dev
+         server: true # System.get_env("PHX_SERVER") || config_env() == :dev
 
   # Задаем конфиг для базы данных
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
