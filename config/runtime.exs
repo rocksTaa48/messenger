@@ -68,29 +68,5 @@ if config_env() in [:dev, :prod] do
   host = System.get_env("PHX_HOST") || "example.com"
 
   config :messenger, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
-
-  config :messenger, MessengerWeb.Endpoint,
-    url: [host: host, port: 443, scheme: "https"],
-    http: [
-      ip: {0, 0, 0, 0, 0, 0, 0, 0},
-      port: port,
-      thousand_island_options: [
-        shutdown_timeout: 30_000
-      ]
-    ],
-    secret_key_base: secret_key_base
-
-  # ## SSL Support
-  #
-  # To get SSL working, you will need to add the `https` key
-  # to your endpoint configuration:
-  #
-  #     config :messenger, MessengerWeb.Endpoint,
-  #       https: [
-  #         ...,
-  #         port: 443,
-  #         cipher_suite: :strong,
-  #         keyfile: System.get_env("SOME_APP_SSL_KEY_PATH"),
-  #         certfile: System.get_env("SOME_APP_SSL_CERT_PATH")
-  #       ]
+  
 end
