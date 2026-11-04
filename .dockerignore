@@ -1,0 +1,16 @@
+/_build
+/deps
+/.elixir_ls
+/.idea/*
+/.vscode/*
+/assets/node_modules
+/assets/.svelte-kit
+/assets/build
+
+/.env
+/logs
+/*.log
+
+/.git
+/.gitignore
+.DS_Store

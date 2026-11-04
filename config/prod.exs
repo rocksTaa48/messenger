@@ -19,6 +19,8 @@ config :messenger, MessengerWeb.Endpoint,
     ]
   ]
 
+app_host = System.get_env("APP_HOST") || "localhost"
+
 # Configure Swoosh API Client
 config :swoosh, api_client: Swoosh.ApiClient.Req
 

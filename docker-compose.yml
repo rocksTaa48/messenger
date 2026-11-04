@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "4000:4000"
+    restart: always
+    environment:
+      - MIX_ENV=prod
+      - PORT=4000
+      - SECRET_KEY_BASE=${SECRET_KEY_BASE}
+      - APP_HOST=${APP_HOST}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - SECURE_USER_API_MASTER_KEY=${SECURE_USER_API_MASTER_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOSTNAME=${DB_HOSTNAME}
+      - DB_PORT=${DB_PORT}
+      - DB_POOLSIZE=${DB_POOLSIZE}
+      - CLUSTERPAY_API_KEY=${CLUSTERPAY_API_KEY}
+      - CLUSTERPAY_BASE_URL=${CLUSTERPAY_BASE_URL}
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:18.6-alpine3.24
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Переменные для init.sql для создания пользователей, владельцев баз
+      ELIXIR_DB_USER: ${ELIXIR_DB_USER}
+      ELIXIR_DB_PASSWORD: ${ELIXIR_DB_PASSWORD}
+      CLUSTER_PAY_DB_USER: ${CLUSTER_PAY_DB_USER}
+      CLUSTER_PAY_DB_PASSWORD: ${CLUSTER_PAY_DB_PASSWORD}
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - db_data:/var/lib/postgresql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+  caddy:
+    image: caddy:2.11.7-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:
