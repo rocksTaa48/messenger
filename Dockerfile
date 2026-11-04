@@ -50,26 +50,30 @@ RUN mix compile
 RUN mix release
 
 # ==========================================
-# ЭТАП 3: Финальный минимальный образ для запуска
+# ЭТАП 3: Минимальный образ для запуска
 # ==========================================
 FROM alpine:3.23.7
 
-# Устанавливаем системные зависимости, необходимые для работы Erlang-рантайма
+# Устанавливаем необходимые зависимости для работы Erlang
 RUN apk add --no-cache libstdc++ openssl ncurses-libs tzdata
 
+# Фиксируем рабочую директорию
 WORKDIR /messenger
 
-# Безопасность: запускаем приложение от имени системного пользователя 'nobody'
-RUN chown nobody /messenger
+# Копируем собранный релиз из Второго этапа (пока мы под root)
+COPY --from=elixir-builder /messenger/_build/prod/rel/messenger ./
+
+# Копируем скрипт
+COPY entrypoint.sh ./
+
+# Делаем скрипт исполняемым и отдаем всю папку пользователю nobody
+RUN chmod +x entrypoint.sh && chown -R nobody:root /messenger
+
+# Безопасность: теперь переключаемся на системного пользователя 'nobody'
 USER nobody
 
-# Копируем собранный релиз из Второго этапа
-COPY --from=elixir-builder --chown=nobody:root /messenger/_build/prod/rel/messenger ./
-
-COPY entrypoint.sh ./
-RUN chmod +x entrypoint.sh && chown nobody entrypoint.sh
-
+# Настраиваем домашнюю директорию для Erlang/Phoenix
 ENV HOME=/messenger
 
-# Теперь контейнер всегда сначала выполнит скрипт
+# Теперь контейнер при старте выполнит entrypoint.sh
 ENTRYPOINT ["./entrypoint.sh"]
