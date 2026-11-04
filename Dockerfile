@@ -64,9 +64,12 @@ RUN chown nobody /messenger
 USER nobody
 
 # Копируем собранный релиз из Второго этапа
-COPY --from=elixir-builder --chown=nobody:root /messenger/_build/prod/rel/my_app ./
+COPY --from=elixir-builder --chown=nobody:root /messenger/_build/prod/rel/messenger ./
+
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh && chown nobody entrypoint.sh
 
 ENV HOME=/messenger
 
-# Запускаем релиз
-CMD ["bin/messenger", "start"]
+# Теперь контейнер всегда сначала выполнит скрипт
+ENTRYPOINT ["./entrypoint.sh"]
