@@ -1,17 +1,15 @@
 #!/bin/sh
 set -e
 
-# Ждем, пока база данных PostgreSQL встанет
-echo "Waiting for database to be ready..."
-while ! nc -z db 5432; do
-  sleep 0.5
-done
-echo "Database is ready!"
+# Ждем базу
+while ! nc -z postgres 5432; do sleep 0.5; done
 
-# Накатываем миграции
-echo "Running migrations..."
-/app/bin/messenger migrate
+echo "=== Running Ecto Migrations ==="
+/messenger/bin/messenger eval "Messenger.Release.migrate()"
 
-# Запускаем само приложение Phoenix
-echo "Starting Phoenix server..."
-exec /app/bin/messenger start
+echo "=== Running Database Seeds ==="
+/messenger/bin/messenger eval "Messenger.Release.seed()"
+
+echo "=== Starting Phoenix Server ==="
+exec /messenger/bin/messenger start
+
