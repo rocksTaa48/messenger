@@ -68,4 +68,34 @@ defmodule Messenger.ChatsFixtures do
 
     chat_summary
   end
+
+  @doc """
+  Generate a image_session.
+  """
+  def image_session_fixture(attrs \\ %{}) do
+    {:ok, image_session} =
+      attrs
+      |> Enum.into(%{
+        last_image_url: "some last_image_url",
+        overrides: %{}
+      })
+      |> Messenger.Chats.create_image_session()
+
+    image_session
+  end
+
+  @doc """
+  Generate a chat_image.
+  """
+  def chat_image_fixture(attrs \\ %{}) do
+    {:ok, chat_image} =
+      attrs
+      |> Enum.into(%{
+        metadata: %{},
+        storage_key: "some storage_key"
+      })
+      |> Messenger.Chats.create_chat_image()
+
+    chat_image
+  end
 end

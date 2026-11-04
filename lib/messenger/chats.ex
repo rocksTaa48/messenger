@@ -4,7 +4,7 @@ defmodule Messenger.Chats do
   alias Ecto.Multi
   alias Messenger.Repo
   alias Messenger.Accounts.Transaction
-  alias Messenger.Chats.{Chat, Message, Group, PinnedChat, ChatSummary}
+  alias Messenger.Chats.{Chat, Message, Group, PinnedChat, ChatSummary, ImageSession}
 
   @doc"""
   Функция достает все сообщения из текущего чата пользователя
@@ -507,5 +507,4 @@ defmodule Messenger.Chats do
 
     |> Repo.transaction()
   end
-
 end

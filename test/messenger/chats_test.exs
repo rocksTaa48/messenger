@@ -236,4 +236,116 @@ defmodule Messenger.ChatsTest do
       assert %Ecto.Changeset{} = Chats.change_chat_summary(chat_summary)
     end
   end
+
+  describe "image_sessions" do
+    alias Messenger.Chats.ImageSession
+
+    import Messenger.ChatsFixtures
+
+    @invalid_attrs %{overrides: nil, last_image_url: nil}
+
+    test "list_image_sessions/0 returns all image_sessions" do
+      image_session = image_session_fixture()
+      assert Chats.list_image_sessions() == [image_session]
+    end
+
+    test "get_image_session!/1 returns the image_session with given id" do
+      image_session = image_session_fixture()
+      assert Chats.get_image_session!(image_session.id) == image_session
+    end
+
+    test "create_image_session/1 with valid data creates a image_session" do
+      valid_attrs = %{overrides: %{}, last_image_url: "some last_image_url"}
+
+      assert {:ok, %ImageSession{} = image_session} = Chats.create_image_session(valid_attrs)
+      assert image_session.overrides == %{}
+      assert image_session.last_image_url == "some last_image_url"
+    end
+
+    test "create_image_session/1 with invalid data returns error changeset" do
+      assert {:error, %Ecto.Changeset{}} = Chats.create_image_session(@invalid_attrs)
+    end
+
+    test "update_image_session/2 with valid data updates the image_session" do
+      image_session = image_session_fixture()
+      update_attrs = %{overrides: %{}, last_image_url: "some updated last_image_url"}
+
+      assert {:ok, %ImageSession{} = image_session} = Chats.update_image_session(image_session, update_attrs)
+      assert image_session.overrides == %{}
+      assert image_session.last_image_url == "some updated last_image_url"
+    end
+
+    test "update_image_session/2 with invalid data returns error changeset" do
+      image_session = image_session_fixture()
+      assert {:error, %Ecto.Changeset{}} = Chats.update_image_session(image_session, @invalid_attrs)
+      assert image_session == Chats.get_image_session!(image_session.id)
+    end
+
+    test "delete_image_session/1 deletes the image_session" do
+      image_session = image_session_fixture()
+      assert {:ok, %ImageSession{}} = Chats.delete_image_session(image_session)
+      assert_raise Ecto.NoResultsError, fn -> Chats.get_image_session!(image_session.id) end
+    end
+
+    test "change_image_session/1 returns a image_session changeset" do
+      image_session = image_session_fixture()
+      assert %Ecto.Changeset{} = Chats.change_image_session(image_session)
+    end
+  end
+
+  describe "chat_images" do
+    alias Messenger.Chats.ChatImage
+
+    import Messenger.ChatsFixtures
+
+    @invalid_attrs %{metadata: nil, storage_key: nil}
+
+    test "list_chat_images/0 returns all chat_images" do
+      chat_image = chat_image_fixture()
+      assert Chats.list_chat_images() == [chat_image]
+    end
+
+    test "get_chat_image!/1 returns the chat_image with given id" do
+      chat_image = chat_image_fixture()
+      assert Chats.get_chat_image!(chat_image.id) == chat_image
+    end
+
+    test "create_chat_image/1 with valid data creates a chat_image" do
+      valid_attrs = %{metadata: %{}, storage_key: "some storage_key"}
+
+      assert {:ok, %ChatImage{} = chat_image} = Chats.create_chat_image(valid_attrs)
+      assert chat_image.metadata == %{}
+      assert chat_image.storage_key == "some storage_key"
+    end
+
+    test "create_chat_image/1 with invalid data returns error changeset" do
+      assert {:error, %Ecto.Changeset{}} = Chats.create_chat_image(@invalid_attrs)
+    end
+
+    test "update_chat_image/2 with valid data updates the chat_image" do
+      chat_image = chat_image_fixture()
+      update_attrs = %{metadata: %{}, storage_key: "some updated storage_key"}
+
+      assert {:ok, %ChatImage{} = chat_image} = Chats.update_chat_image(chat_image, update_attrs)
+      assert chat_image.metadata == %{}
+      assert chat_image.storage_key == "some updated storage_key"
+    end
+
+    test "update_chat_image/2 with invalid data returns error changeset" do
+      chat_image = chat_image_fixture()
+      assert {:error, %Ecto.Changeset{}} = Chats.update_chat_image(chat_image, @invalid_attrs)
+      assert chat_image == Chats.get_chat_image!(chat_image.id)
+    end
+
+    test "delete_chat_image/1 deletes the chat_image" do
+      chat_image = chat_image_fixture()
+      assert {:ok, %ChatImage{}} = Chats.delete_chat_image(chat_image)
+      assert_raise Ecto.NoResultsError, fn -> Chats.get_chat_image!(chat_image.id) end
+    end
+
+    test "change_chat_image/1 returns a chat_image changeset" do
+      chat_image = chat_image_fixture()
+      assert %Ecto.Changeset{} = Chats.change_chat_image(chat_image)
+    end
+  end
 end

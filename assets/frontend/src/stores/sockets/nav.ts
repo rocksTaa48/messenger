@@ -10,7 +10,7 @@ export function requestDataForScreen(node: NavigationNode) {
             send('chat:click_new', {});
             break;
         case 'inside_chat':
-            send('chat:click_open', { chat_id: node.params?.chat_id });
+            send('chat:click_open', { chat_id: node.params?.chat_id, type: node.params?.type });
             break;
         case 'settings':
             send('user:click_show_user_usage');

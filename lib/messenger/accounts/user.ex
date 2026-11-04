@@ -12,11 +12,13 @@ defmodule Messenger.Accounts.User do
     field :status, :string, default: "free"
     field :raw_data, :map, default: %{}
     field :profile_overrides, :map, default: %{}
+    belongs_to :ai_model, Messenger.AiProfiles.AiModel
 
     has_many :groups, Messenger.Chats.Group
     has_many :chats, Messenger.Chats.Chat
     has_many :pinned_chats, Messenger.Chats.PinnedChat
-    belongs_to :ai_model, Messenger.AiProfiles.AiModel
+    has_many :teams, Messenger.Teams.Team
+    has_many :team_members, Messenger.Teams.TeamMember
 
     timestamps(type: :utc_datetime)
   end

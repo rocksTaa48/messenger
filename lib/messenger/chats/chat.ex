@@ -7,6 +7,7 @@ defmodule Messenger.Chats.Chat do
     field :summarized_up_to_message_id, :integer
     field :last_message, :string
     field :profile_overrides, :map, default: %{}
+    field :is_image_session, :boolean, default: false
 
     belongs_to :user, Messenger.Accounts.User
     belongs_to :group, Messenger.Chats.Group

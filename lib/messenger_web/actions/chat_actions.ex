@@ -9,11 +9,12 @@ defmodule MessengerWeb.Actions.ChatActions do
   @doc"""
   NEW:                Функция 'click_new' подготавливает нам создание нового чата
   """
-  def handle_in("click_new", _payload, socket) do
+  def handle_in("click_new", payload, socket) do
     current_user = socket.assigns.current_user
     ai_model_id = current_user.ai_model_id
     ai_models = AiProfiles.get_all_users_ai_models()
-    case Chats.ChatsBuilder.build_ai_profile(current_user, _payload) do
+    type = Map.get(payload, "type")
+    case Chats.ChatsBuilder.build_ai_profile(current_user, payload) do
       {:ok, %{ai_model: ai_model, ai_profile: ai_profile}} ->
       formatted_ai_models = Enum.map(ai_models, &Serializer.ai_model_serialize/1)
       formatted_user_ai_model = Serializer.ai_model_serialize(ai_model)
