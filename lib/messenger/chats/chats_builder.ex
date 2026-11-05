@@ -11,8 +11,12 @@ defmodule Messenger.Chats.ChatsBuilder do
   def build_ai_profile(current_user, payload \\ %{}) do
 
     chat_id = Map.get(payload, "chat_id")
+    is_image_session = Map.fetch!(payload, "is_image_session")
     chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
-    default_user_ai_profile = AiProfiles.get_default_user_ai_profile(current_user.status) # Default user AiProfile
+
+    default_user_ai_profile =
+      unless is_image_session == true, do: AiProfiles.get_default_user_ai_profile(current_user.status),
+                                       else: AiProfiles.get_orchestrator_profile(current_user.status) # Default user AiProfile
     ai_models = AiProfiles.get_all_users_ai_models() # All models in application
     user_ai_profile = current_user.profile_overrides || %{} # User ai_profile overrides top_p, temperature...
     user_ai_model_id = current_user.ai_model_id # User global ai_model (change in settings user profile)

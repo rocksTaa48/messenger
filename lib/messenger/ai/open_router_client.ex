@@ -40,6 +40,54 @@ defmodule Messenger.Ai.OpenRouterClient do
 
 
   @doc"""
+  Вызов функции текст -> текст без стриминга с целью создания ПРОМПТА для генератора изображений
+  """
+  def call_orchestrator(attrs) do
+    api_key = Application.get_env(:messenger, :ai_providers)[:openrouter_api_key]
+    url = "https://openrouter.ai/api/v1/chat/completions"
+
+    content = Map.fetch!(attrs, "content")
+    ai_model = Map.fetch!(attrs, "ai_model")
+    ai_profile = Map.fetch!(attrs, "ai_profile")
+
+
+    case Req.post(url,
+           json: build_orchestrator_body(ai_model, ai_profile, content),
+           auth: {:bearer, api_key},
+           finch: [name: Messenger.OpenRouterFinch],
+           receive_timeout: 30_000,
+           headers: [
+             {"HTTP-Referer", "https://your-monorepo-app.com"},
+             {"X-Title", "Phoenix Svelte Chat"}
+           ]
+         ) do
+      {:ok, resp}     -> Error.classify(resp)
+      {:error, _} = e -> Error.classify(e)
+    end
+  end
+
+  defp build_orchestrator_body(ai_model, ai_profile, content) do
+    body =
+      %{
+        model: ai_model,
+        messages: [
+          %{role: "system", content: ai_profile.prompt.content},
+          %{role: "user", content: content}
+        ],
+        temperature: ai_profile.temperature,
+        top_p: ai_profile.top_p,
+        frequency_penalty: ai_profile.frequency_penalty,
+        presence_penalty: ai_profile.presence_penalty,
+        max_tokens: ai_profile.max_completion_tokens
+      }
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+      |> Map.new()
+  end
+
+
+
+
+  @doc"""
   Вызов функции текст -> текст без стриминга для создания НАЗВАНИЕ чата
   """
   def call_title(attrs) do

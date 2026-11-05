@@ -7,10 +7,10 @@ export function requestDataForScreen(node: NavigationNode) {
             send('base:click_nav_chats', { group_id: node.params?.group_id });
             break;
         case 'new_chat':
-            send('chat:click_new', {});
+            send('chat:click_new', {is_image_session: node.params?.is_image_session});
             break;
         case 'inside_chat':
-            send('chat:click_open', { chat_id: node.params?.chat_id, type: node.params?.type });
+            send('chat:click_open', { chat_id: node.params?.chat_id, is_image_session: node.params?.is_image_session });
             break;
         case 'settings':
             send('user:click_show_user_usage');

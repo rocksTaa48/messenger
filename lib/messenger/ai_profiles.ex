@@ -33,6 +33,15 @@ defmodule Messenger.AiProfiles do
     |> Repo.one()
   end
 
+  # Достаем профиль по умолчанию для оркестрации при генерации изображений
+  def get_orchestrator_profile(user_status) do
+    AiProfile
+    |> where(tier: "premium") #^user_status ЗАГЛУШКА ПОКА!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    |> where(purpose: "image_sessions")
+    |> preload([:prompt])
+    |> Repo.one()
+  end
+
   # Достаем дефолтную модель доступную для пользователя по его "status"
   def get_default_user_ai_model(user_status) do
     AiModel

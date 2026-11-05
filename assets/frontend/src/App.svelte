@@ -66,7 +66,7 @@
     const targetTab = e.detail; // 'Chats', 'Agents', 'Settings'
     if (targetTab === 'Chats') appState.goTo({ screen: 'chats', params: {} });
     if (targetTab === 'CreateChat') appState.goTo({ screen: 'new_chat', params: {} });
-    if (targetTab === 'CreateImageSession') appState.goTo({ screen: 'new_chat', params: {type: "image_session"} });
+    if (targetTab === 'CreateImageSession') appState.goTo({ screen: 'new_chat', params: {is_image_session: true} });
     if (targetTab === 'Settings') appState.goTo({ screen: 'settings' });
   }
 </script>

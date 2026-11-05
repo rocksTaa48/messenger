@@ -13,7 +13,8 @@ defmodule MessengerWeb.Actions.ChatActions do
     current_user = socket.assigns.current_user
     ai_model_id = current_user.ai_model_id
     ai_models = AiProfiles.get_all_users_ai_models()
-    type = Map.get(payload, "type")
+    is_image_session = Map.get(payload, "is_image_session") # Поверяем че за чат, Img или простой
+    IO.inspect(is_image_session, label: "<----------------IMAGE SESSION--------------->")
     case Chats.ChatsBuilder.build_ai_profile(current_user, payload) do
       {:ok, %{ai_model: ai_model, ai_profile: ai_profile}} ->
       formatted_ai_models = Enum.map(ai_models, &Serializer.ai_model_serialize/1)
