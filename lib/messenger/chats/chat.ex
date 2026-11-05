@@ -15,6 +15,7 @@ defmodule Messenger.Chats.Chat do
     has_many :messages, Messenger.Chats.Message
     has_many :pinned_chats, Messenger.Chats.PinnedChat
     has_many :chat_summaries, Messenger.Chats.ChatSummary
+    has_one :image_session, Messenger.Chats.ImageSession
 
     timestamps(type: :utc_datetime)
   end
@@ -27,6 +28,7 @@ defmodule Messenger.Chats.Chat do
       :group_id,
       :ai_model_id,
       :summarized_up_to_message_id,
+      :is_image_session,
       :last_message,
       :profile_overrides,
     ])

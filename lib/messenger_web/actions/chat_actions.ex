@@ -116,7 +116,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   CREATE_MESSAGE:    Мультифункция создает чат и сообщение в нем от пользователя
   """
   def handle_in("click_submit_message", payload, socket) do
-    IO.inspect(payload, label: "ПАРАМСЫ ПЕРЕДАННЫЕ при вебсокете")
+    # IO.inspect(payload, label: "ПАРАМСЫ ПЕРЕДАННЫЕ при вебсокете")
 
     current_user = socket.assigns.current_user
     case Chats.MessageSender.create_message(current_user, payload) do

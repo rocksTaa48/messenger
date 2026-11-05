@@ -14,8 +14,8 @@ defmodule Messenger.Chats.MessageSender do
       nil ->
         {:error, "build profile error"}
       {:ok, %{ai_model: ai_model, ai_profile: ai_profile}} ->
-        IO.inspect(ai_model, label: "ПЭЁЛОАД КОТОРЫЙ ОТДАЛ В БИЛДЕР - МОДЕЛЬ")
-        IO.inspect(ai_profile, label: "ПЭЁЛОАД КОТОРЫЙ ОТДАЛ В БИЛДЕР - ПРОФИЛЬ")
+        # IO.inspect(ai_model, label: "ПЭЁЛОАД КОТОРЫЙ ОТДАЛ В БИЛДЕР - МОДЕЛЬ")
+        # IO.inspect(ai_profile, label: "ПЭЁЛОАД КОТОРЫЙ ОТДАЛ В БИЛДЕР - ПРОФИЛЬ")
         send_run(%{
         "user_id" => current_user.id,
         "user_status" => current_user.status,
@@ -81,7 +81,6 @@ defmodule Messenger.Chats.MessageSender do
       "user_id" => user_id,
       "is_audio" => is_audio,
     }
-    IO.inspect(complete_attrs, label: "Это пайлоад который попал в CREATE <--------------------------------------------------")
 
     case Chats.create_user_message(complete_attrs) do
       {:error, _failed_step, _failed_value, _changesets} ->

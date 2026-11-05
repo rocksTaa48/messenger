@@ -68,5 +68,4 @@ if config_env() in [:dev, :prod] do
   host = System.get_env("PHX_HOST") || "example.com"
 
   config :messenger, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
-
 end

@@ -14,6 +14,7 @@ defmodule Messenger.Chats.Message do
 
     belongs_to :chat, Messenger.Chats.Chat
     belongs_to :ai_model, Messenger.AiProfiles.AiModel
+    has_many :chat_images, Messenger.Chats.ChatImage
 
     timestamps(type: :utc_datetime)
   end

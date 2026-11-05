@@ -49,7 +49,6 @@ defmodule Messenger.Ai.MessageStreaming do
         full_context = context ++ [%{role: "user", content: user_content}]
         system_prompt = ai_profile.prompt.content
         messages = [%{role: "system", content: system_prompt <> "\n\n" <> summaries} | full_context]
-        IO.inspect(messages, label: "CONTENT----------------------------------------------------------->")
         all_text =
           messages
           |> Enum.map(fn msg -> msg.content end)
