@@ -73,9 +73,11 @@ export function sendMessage(
     if (!text.trim()) return;
     const tempId = `temp-${Date.now()}`;
     let currentChatId: string | null = null;
+    let isImageSession = false;
 
     update(state => {
         currentChatId = state.active_chat?.id || null;
+        isImageSession = !currentChatId && (state.nav_context?.params?.is_image_session || false);
         const activeChat = state.active_chat || { id: '', messages: [], group_id: state.nav_context.params?.group_id };
         const newMessage = { id: tempId, role: 'user', temp_id: tempId, content: text, created_at: new Date().toISOString(), is_pending: true };
 
@@ -92,7 +94,11 @@ export function sendMessage(
 
     const pushRequest = send('chat:click_submit_message', {
         chat_id: currentChatId, text, temp_id: tempId,
-        ...(currentChatId ? {} : { ai_model_id: aiModelId ? Number(aiModelId) : undefined, profile_overrides: overrides }),
+        ...(currentChatId ? {} : {
+            ai_model_id: aiModelId ? Number(aiModelId) : undefined,
+            profile_overrides: overrides,
+            is_image_session: isImageSession
+        }),
     });
 
     if (!pushRequest) {

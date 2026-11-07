@@ -10,7 +10,7 @@ export function requestDataForScreen(node: NavigationNode) {
             send('chat:click_new', {is_image_session: node.params?.is_image_session});
             break;
         case 'inside_chat':
-            send('chat:click_open', { chat_id: node.params?.chat_id, is_image_session: node.params?.is_image_session });
+            send('chat:click_open', { chat_id: node.params?.chat_id });
             break;
         case 'settings':
             send('user:click_show_user_usage');

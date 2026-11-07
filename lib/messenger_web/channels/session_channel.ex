@@ -164,7 +164,28 @@ defmodule MessengerWeb.SessionChannel do
     {:noreply, socket}
   end
 
-  # 4. Пушим событие на фронтенд обновили название чата.
+  # 4. Оркестратор вернул JSON с prompt.
+  @impl true
+  def handle_info({:ai_orchestrator_done, payload}, socket) do
+    push(socket, "ai:orchestrator_done", payload)
+    {:noreply, socket}
+  end
+
+  # 5. Картинка успешно сгенерирована и сохранена.
+  @impl true
+  def handle_info({:ai_image_done, payload}, socket) do
+    push(socket, "ai:image_done", payload)
+    {:noreply, socket}
+  end
+
+  # 6. Генерация картинки упала — показываем ошибку у того же assistant.
+  @impl true
+  def handle_info({:ai_image_error, payload}, socket) do
+    push(socket, "ai:image_error", payload)
+    {:noreply, socket}
+  end
+
+  # 7. Пушим событие на фронтенд обновили название чата.
   @impl true
   def handle_info({:chat_title_update, %{chat_id: chat_id, title: title}}, socket) do
     push(socket, "chat_title_update", %{
@@ -174,13 +195,33 @@ defmodule MessengerWeb.SessionChannel do
     {:noreply, socket}
   end
 
-  # 5. Пушим событие на фронтенд ошибка название чата.
+  # 8. Пушим событие на фронтенд ошибка название чата.
   @impl true
   def handle_info({:chat_title_error, %{chat_id: chat_id, reason: reason}}, socket) do
     push(socket, "chat_title_error", %{
       chat_id: to_string(chat_id),
       reason: reason
     })
+    {:noreply, socket}
+  end
+
+  # 9. Пушим расшифровку голосового сообщения.
+  def handle_info({:ai_transcript_done, payload}, socket) do
+    push(socket, "ai:transcript_done", payload)
+    {:noreply, socket}
+  end
+
+  # 10. Ошибка расшифровки голосового.
+  def handle_info({:ai_transcript_error, payload}, socket) do
+    push(socket, "ai:transcript_error", payload)
+    {:noreply, socket}
+  end
+
+  # 0. Фолбэк от неожиданного сообщения
+  @impl true
+  def handle_info(msg, socket) do
+    # Можно оставить просто IO.inspect для отладки, или вообще убрать, если не нужно.
+    IO.inspect(msg, label: "⚠️ Неожиданное сообщение в SessionChannel (PubSub)")
     {:noreply, socket}
   end
 
@@ -201,26 +242,4 @@ defmodule MessengerWeb.SessionChannel do
     push(socket, "payment:completed", payload)
     {:noreply, socket}
   end
-
-  # 6. Пушим расшифровку голосового сообщения.
-  def handle_info({:ai_transcript_done, payload}, socket) do
-    push(socket, "ai:transcript_done", payload)
-    {:noreply, socket}
-  end
-
-  # 7. Ошибка расшифровки голосового.
-  def handle_info({:ai_transcript_error, payload}, socket) do
-    push(socket, "ai:transcript_error", payload)
-    {:noreply, socket}
-  end
-
-  # 0. Фолбэк от неожиданного сообщения
-  @impl true
-  def handle_info(msg, socket) do
-    # Можно оставить просто IO.inspect для отладки, или вообще убрать, если не нужно.
-    IO.inspect(msg, label: "⚠️ Неожиданное сообщение в SessionChannel (PubSub)")
-    {:noreply, socket}
-  end
-
-
 end

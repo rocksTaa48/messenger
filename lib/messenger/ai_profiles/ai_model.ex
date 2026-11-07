@@ -13,6 +13,7 @@ defmodule Messenger.AiProfiles.AiModel do
     field :cost_updated_at, :string
     field :config, :map, default: %{}
     field :tier, :string, default: "free" # "free" | "premium" | "enterprise"
+    field :type, :string, default: "llm" # Тип модели "LLM", "IMAGE", "TRANSCRIPT"
     field :is_default, :boolean, default: false
     field :display_color, :string       # Например "ffffff" это для UI
     field :display_name, :string        # Например "GPT-4o Mini"
@@ -37,6 +38,7 @@ defmodule Messenger.AiProfiles.AiModel do
       :display_description,
       :display_color,
       :tier,
+      :type,
       :is_default,
       :model_name,
       :openrouter_model_id,

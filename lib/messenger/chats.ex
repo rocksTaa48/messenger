@@ -4,7 +4,7 @@ defmodule Messenger.Chats do
   alias Ecto.Multi
   alias Messenger.Repo
   alias Messenger.Accounts.Transaction
-  alias Messenger.Chats.{Chat, Message, Group, PinnedChat, ChatSummary, ImageSession}
+  alias Messenger.Chats.{Chat, Message, Group, PinnedChat, ChatSummary, ImageSession, ChatImage}
 
   @doc"""
   Функция достает все сообщения из текущего чата пользователя
@@ -340,11 +340,13 @@ defmodule Messenger.Chats do
   def create_user_message(attrs) do
     user_id = Map.fetch!(attrs, "user_id")
     ai_model_id = Map.fetch!(attrs, "ai_model_id")
+    image_ai_model_id = Map.get(attrs, "image_ai_model_id")
     chat_id = Map.get(attrs, "chat_id")
     chat = if chat_id, do: Repo.get_by(Chat, id: chat_id, user_id: user_id), else: nil
     overrides = Map.get(attrs, "overrides")
     content = Map.get(attrs, "content")
     is_audio = Map.get(attrs, "is_audio",false)
+    is_image_session = Map.get(attrs, "is_image_session", false)
     case chat do
       nil ->
         last_message = content |> String.slice(0, 100)
@@ -355,7 +357,8 @@ defmodule Messenger.Chats do
           "user_id" => user_id,
           "ai_model_id" => String.to_integer(to_string(ai_model_id)),
           "last_message" => last_message,
-          "profile_overrides" => overrides
+          "profile_overrides" => overrides,
+          "is_image_session" => is_image_session
         }))
 
           # 2: Собственно сообщение от пользователя
@@ -367,6 +370,20 @@ defmodule Messenger.Chats do
             "role" => "user",
             "is_audio" => is_audio
           })
+        end)
+
+          # 3: Инициализируем ImageSession при старте чата
+        |> Multi.run(:image_session, fn repo, %{chat: chat} ->
+          if is_image_session do
+            repo.insert(ImageSession.changeset(
+              %ImageSession{}, %{
+                "chat_id" => chat.id,
+                "ai_model_id" => String.to_integer(to_string(image_ai_model_id))
+              })
+            )
+          else
+            {:ok, nil}
+          end
         end)
 
         |> Repo.transaction()
@@ -436,69 +453,12 @@ defmodule Messenger.Chats do
     |> Repo.transaction()
   end
 
-  def create_user_image_session_message(attrs) do
-    user_id = Map.fetch!(attrs, "user_id")
-    ai_model_id = Map.fetch!(attrs, "ai_model_id")
-    image_ai_model_id = Map.fetch!(attrs, "image_ai_model_id")
-    chat_id = Map.get(attrs, "chat_id")
-    chat = if chat_id, do: Repo.get_by(Chat, id: chat_id, user_id: user_id), else: nil
-    overrides = Map.get(attrs, "overrides")
-    image_session_overrides = Map.get(attrs, "image_session_overrides")
-    content = Map.get(attrs, "content")
-    is_audio = Map.get(attrs, "is_audio",false)
-    case chat do
-      nil ->
-        last_message = content |> String.slice(0, 100)
-        Multi.new()
-
-        # 1: Создаем чат со всеми обязательными полями
-        |> Multi.insert(:chat, Chat.changeset(%Chat{}, %{
-          "user_id" => user_id,
-          "ai_model_id" => String.to_integer(to_string(ai_model_id)),
-          "last_message" => last_message,
-          "profile_overrides" => overrides,
-          "is_image_session" => true,
-        }))
-
-          # 2: Собственно сообщение от пользователя
-        |> Multi.insert(:message, fn %{chat: chat} ->
-          Message.changeset(%Message{}, %{
-            "chat_id" => chat.id,
-            "content" => content,
-            "ai_model_id" => String.to_integer(to_string(ai_model_id)),
-            "role" => "user",
-            "is_audio" => is_audio
-          })
-        end)
-
-          # 3: Сама ImageSession
-        |> Multi.insert(:image_session, fn %{chat: chat} ->
-          ImageSession.changeset(%ImageSession{}, %{
-            "chat_id" => chat.id,
-            "ai_model_id" => String.to_integer(to_string(image_ai_model_id)),
-            "overrides" => image_session_overrides,
-          })
-        end)
-
-        |> Repo.transaction()
-      chat ->
-        last_message = content |> String.slice(0, 100)
-        Multi.new()
-        |> Multi.insert(:message, Message.changeset(%Message{}, %{
-          "chat_id" => String.to_integer(to_string(chat.id)),
-          "ai_model_id" => String.to_integer(to_string(ai_model_id)),
-          "content" => content,
-          "role" => "user",
-          "is_audio" => is_audio
-        }))
-
-        |> Multi.update(:chat, Chat.changeset_for_update_last_message_or_model(chat, %{
-          "last_message" => last_message,
-        }))
-
-        |> Repo.transaction()
-    end
+  def create_chat_image(attrs) when is_map(attrs) do
+    %ChatImage{}
+    |> ChatImage.changeset(attrs)
+    |> Repo.insert()
   end
+
 
 
   def get_summaries(chat_id) do

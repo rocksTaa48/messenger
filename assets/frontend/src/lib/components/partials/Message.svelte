@@ -16,6 +16,10 @@
         is_pending?: boolean;
         temp_id?: string;
         ai_model_id: number | string;
+        // image section
+        image_url?: string;
+        image_media_type?: string;
+        image_error?: string;
     }>;
 
     $: aiModels = $appState?.ai_models || [];
@@ -44,6 +48,12 @@
         if (!modelId) return 'default';
         const model = aiModels.find(m => String(m.id) === String(modelId));
         return model?.provider || 'default';
+    }
+
+    $: isImageSession = $appState?.active_chat?.is_image_session === true;
+
+    function handleRetryImage(messageId: string | number) {
+        appState.retryImage(messageId);
     }
 
     function formatTime(isoString: string): string {

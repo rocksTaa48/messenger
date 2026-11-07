@@ -45,7 +45,7 @@ defmodule Messenger.AiProfiles do
   # Достаем дефолтную модель доступную для пользователя по его "status"
   def get_default_user_ai_model(user_status) do
     AiModel
-      |> where(tier: ^user_status, is_default: true, is_active: true)
+      |> where(tier: ^user_status, is_default: true, is_active: true, type: "llm")
       |> Repo.one()
   end
 
@@ -59,6 +59,13 @@ defmodule Messenger.AiProfiles do
   def get_all_users_ai_models do
     AiModel
     |> where(is_active: true)
+    |> Repo.all()
+  end
+
+  def get_all_users_image_ai_models do
+    AiModel
+    |> where(is_active: true)
+    |> where(type: "image")
     |> Repo.all()
   end
 

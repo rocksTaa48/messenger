@@ -5,7 +5,7 @@ defmodule Messenger.Repo.Migrations.CreateImageSessions do
     create table(:image_sessions) do
       add :overrides, :map, default: %{}
       add :chat_id, references(:chats, on_delete: :delete_all)
-      add :ai_model, references(:ai_models, on_delete: :nothing)
+      add :ai_model_id, references(:ai_models, on_delete: :nothing)
 
       timestamps(type: :utc_datetime)
     end

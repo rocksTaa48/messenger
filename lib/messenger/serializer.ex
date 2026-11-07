@@ -62,6 +62,7 @@ defmodule Messenger.Serializer do
       "title" => chat.title || "Без названия",
       "group_id" => chat.group_id || nil,
       "ai_model_id" => to_string(chat.ai_model_id) || nil,
+      "is_image_session" => chat.is_image_session,
       "cursor_timestamp" => DateTime.to_iso8601(chat.inserted_at),
       "is_pinned" => Map.get(chat, :is_pinned, false),
       "last_message" => chat.last_message || "Нет сообщений"

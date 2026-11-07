@@ -337,7 +337,11 @@
             frequencyPenalty: currentFrequencyPenalty,
             presencePenalty: currentPresencePenalty
         };
-        appState.sendMessage(text, chatId ? null : pendingAiModelId, overridesToSend);
+        appState.sendMessage(
+            text,
+            chatId ? null : pendingAiModelId,
+            overridesToSend
+        );
         newMessageText = "";
         if (textareaElement) textareaElement.style.height = 'auto';
         isNearBottom = true;

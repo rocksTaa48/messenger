@@ -11,20 +11,30 @@ defmodule Messenger.Chats.ChatsBuilder do
   def build_ai_profile(current_user, payload \\ %{}) do
 
     chat_id = Map.get(payload, "chat_id")
-    is_image_session = Map.fetch!(payload, "is_image_session")
+    is_image_session = Map.get(payload, "is_image_session")
     chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
 
     default_user_ai_profile =
-      unless is_image_session == true, do: AiProfiles.get_default_user_ai_profile(current_user.status),
-                                       else: AiProfiles.get_orchestrator_profile(current_user.status) # Default user AiProfile
+      unless is_image_session == true or chat.is_image_session == true do
+        AiProfiles.get_default_user_ai_profile(current_user.status) # Если просто чат text -> text
+      else
+        AiProfiles.get_orchestrator_profile(current_user.status) # Если чат text -> image
+      end
+
     ai_models = AiProfiles.get_all_users_ai_models() # All models in application
     user_ai_profile = current_user.profile_overrides || %{} # User ai_profile overrides top_p, temperature...
     user_ai_model_id = current_user.ai_model_id # User global ai_model (change in settings user profile)
 
+    image_ai_models = AiProfiles.get_all_users_image_ai_models()
+    payload_image_ai_model_id = Map.get(payload, "image_ai_model_id")
     payload_ai_model_id = Map.get(payload, "ai_model_id") # Get ai_model_id
     payload_overrides = Map.get(payload, "profile_overrides") || %{} # Get chat_ai_profile_overrides
 
-    available_user_models = Enum.filter(ai_models, fn m -> m.tier == current_user.status and m.is_active == true end)
+    available_user_models = Enum.filter(ai_models, fn m ->
+      m.tier == current_user.status and m.is_active == true and m.type == "llm" end)
+
+    available_user_image_models = Enum.filter(ai_models, fn m ->
+      m.tier == current_user.status and m.is_active == true and m.type == "image" end)
 
     user_overrides =
       user_ai_profile
@@ -41,7 +51,16 @@ defmodule Messenger.Chats.ChatsBuilder do
         current_ai_model =
           with nil <- Enum.find(available_user_models, fn m -> m.id == payload_ai_model_id end),
                nil <- Enum.find(available_user_models, fn m -> m.id == user_ai_model_id end) do
-            Enum.find(ai_models, fn m -> m.tier == current_user.status and m.is_active == true and m.is_default == true end)
+            Enum.find(ai_models, fn m ->
+              m.tier == current_user.status and m.is_active == true and m.is_default == true and m.type == "llm"  end)
+          else
+            model -> model
+          end
+
+        current_image_ai_model =
+          with nil <- Enum.find(available_user_image_models, fn m -> m.id == payload_image_ai_model_id end) do
+            Enum.find(image_ai_models, fn m ->
+            m.tier == current_user.status and m.is_active == true and m.is_default == true and m.type == "image" end)
           else
             model -> model
           end
@@ -52,7 +71,7 @@ defmodule Messenger.Chats.ChatsBuilder do
           |> Map.merge(user_overrides)
           |> Map.merge(overrides)
 
-        {:ok, %{ai_model: current_ai_model, ai_profile: current_ai_profile}}
+        {:ok, %{ai_model: current_ai_model, image_ai_model: current_image_ai_model, ai_profile: current_ai_profile}}
 
       chat ->
         current_chat_ai_profile = chat.profile_overrides || %{}
@@ -62,6 +81,14 @@ defmodule Messenger.Chats.ChatsBuilder do
           with nil <- Enum.find(available_user_models, fn m -> m.id == current_chat_model_id end),
                nil <- Enum.find(available_user_models, fn m -> m.id == user_ai_model_id end) do
             Enum.find(ai_models, fn m -> m.tier == current_user.status and m.is_active == true and m.is_default == true end)
+          else
+            model -> model
+          end
+
+        current_image_ai_model =
+          with nil <- Enum.find(available_user_image_models, fn m -> m.id == payload_image_ai_model_id end) do
+            Enum.find(image_ai_models, fn m ->
+              m.tier == current_user.status and m.is_active == true and m.is_default == true and m.type == "image" end)
           else
             model -> model
           end
@@ -77,7 +104,7 @@ defmodule Messenger.Chats.ChatsBuilder do
           |> Map.merge(user_overrides)
           |> Map.merge(chat_overrides)
 
-        {:ok, %{ai_model: current_ai_model, ai_profile: current_ai_profile}}
+        {:ok, %{ai_model: current_ai_model, image_ai_model: current_image_ai_model, ai_profile: current_ai_profile}}
     end
   end
 end

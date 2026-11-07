@@ -113,6 +113,130 @@ export function registerStreamingListeners(channel: Channel) {
             };
         });
     });
+
+    channel.on('ai:orchestrator_done', (payload: {
+        chat_id: string | number;
+        message_id: number;
+        ai_model_id?: string;
+    }) => {
+        update(state => {
+            const targetChatId = String(payload.chat_id);
+
+            const chats_list = state.chats_list.map(chat =>
+                chat && String(chat.id) === targetChatId
+                    ? { ...chat, last_message: '[image]' }
+                    : chat
+            );
+
+            let active_chat = state.active_chat;
+            if (!active_chat) return { ...state, chats_list };
+
+            const activeId = String(active_chat.id || '');
+            if (activeId !== targetChatId && activeId !== '') {
+                return { ...state, chats_list };
+            }
+
+            const messages = [...active_chat.messages];
+            const existingIdx = messages.findIndex(m => String(m.id) === String(payload.message_id));
+
+            const messageEntry = {
+                id: payload.message_id,
+                role: 'assistant',
+                content: '',                          // ← JSON не показываем
+                created_at: new Date().toISOString(),
+                ai_model_id: payload.ai_model_id || active_chat.ai_model_id,
+                is_pending: true,                     // ← skeleton
+            };
+
+            if (existingIdx >= 0) {
+                messages[existingIdx] = { ...messages[existingIdx], ...messageEntry };
+            } else {
+                messages.push(messageEntry as any);
+            }
+
+            active_chat = {
+                ...active_chat,
+                id: payload.chat_id as string,
+                awaiting_response: true,              // держим индикатор «AI думает»
+                last_error_reason: null,
+                messages,
+            };
+
+            return { ...state, chats_list, active_chat };
+        });
+    });
+
+    channel.on('ai:image_done', (payload: {
+        chat_id: string | number;
+        message_id: number;
+        image_url: string;
+        media_type?: string;
+    }) => {
+        update(state => {
+            const targetChatId = String(payload.chat_id);
+
+            const chats_list = state.chats_list.map(chat =>
+                chat && String(chat.id) === targetChatId
+                    ? { ...chat, last_message: '[image]' }
+                    : chat
+            );
+
+            let active_chat = state.active_chat;
+            if (!active_chat) return { ...state, chats_list };
+
+            const activeId = String(active_chat.id || '');
+            if (activeId !== targetChatId && activeId !== '') {
+                return { ...state, chats_list };
+            }
+
+            const messages = active_chat.messages.map(m =>
+                String(m.id) === String(payload.message_id)
+                    ? {
+                        ...m,
+                        image_url: payload.image_url,
+                        image_media_type: payload.media_type || 'image/png',
+                        image_error: undefined,
+                        is_pending: false,
+                    }
+                    : m
+            );
+
+            active_chat = {
+                ...active_chat,
+                awaiting_response: false,
+                last_error_reason: null,
+                messages,
+            };
+
+            return { ...state, chats_list, active_chat };
+        });
+    });
+
+    channel.on('ai:image_error', (payload: {
+        chat_id?: string | number | null;
+        message_id: number;
+        reason: string;
+    }) => {
+        update(state => {
+            let active_chat = state.active_chat;
+            if (!active_chat) return state;
+
+            const messages = active_chat.messages.map(m =>
+                String(m.id) === String(payload.message_id)
+                    ? { ...m, image_error: payload.reason, is_pending: false }
+                    : m
+            );
+
+            active_chat = {
+                ...active_chat,
+                awaiting_response: false,
+                last_error_reason: payload.reason,
+                messages,
+            };
+
+            return { ...state, active_chat };
+        });
+    });
 }
 
 // ============================================================================

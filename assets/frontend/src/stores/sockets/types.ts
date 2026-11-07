@@ -75,6 +75,7 @@ export interface AppState {
         unread?: number;
         group_id: number | null;
         ai_model_id: string;
+        is_image_session: boolean;
         is_pinned: boolean;
         last_message: string;
         cursor_timestamp: string;
@@ -92,6 +93,7 @@ export interface AppState {
         id: string;
         title: string;
         ai_model_id: string;
+        is_image_session: boolean;
         awaiting_response?: boolean;
         last_error_reason?: string | null;
         profile_overrides?: {
@@ -113,6 +115,9 @@ export interface AppState {
             is_transcripted?: boolean;
             is_pending?: boolean;
             temp_id?: string;
+            image_url?: string;
+            image_media_type?: string;
+            image_error?: string;
         }>;
         has_more_messages?: boolean;
     } | null;

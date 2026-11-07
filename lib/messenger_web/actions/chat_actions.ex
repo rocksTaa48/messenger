@@ -10,11 +10,11 @@ defmodule MessengerWeb.Actions.ChatActions do
   NEW:                Функция 'click_new' подготавливает нам создание нового чата
   """
   def handle_in("click_new", payload, socket) do
+    IO.inspect(payload, label: "ПАРАМСЫ ПЕРЕДАННЫЕ при click_new_message")
+
     current_user = socket.assigns.current_user
     ai_model_id = current_user.ai_model_id
     ai_models = AiProfiles.get_all_users_ai_models()
-    is_image_session = Map.get(payload, "is_image_session") # Поверяем че за чат, Img или простой
-    IO.inspect(is_image_session, label: "<----------------IMAGE SESSION--------------->")
     case Chats.ChatsBuilder.build_ai_profile(current_user, payload) do
       {:ok, %{ai_model: ai_model, ai_profile: ai_profile}} ->
       formatted_ai_models = Enum.map(ai_models, &Serializer.ai_model_serialize/1)
@@ -117,7 +117,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   CREATE_MESSAGE:    Мультифункция создает чат и сообщение в нем от пользователя
   """
   def handle_in("click_submit_message", payload, socket) do
-    # IO.inspect(payload, label: "ПАРАМСЫ ПЕРЕДАННЫЕ при вебсокете")
+    IO.inspect(payload, label: "ПАРАМСЫ ПЕРЕДАННЫЕ при click_submit_message")
 
     current_user = socket.assigns.current_user
     case Chats.MessageSender.create_message(current_user, payload) do

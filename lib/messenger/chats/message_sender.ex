@@ -2,30 +2,43 @@ defmodule Messenger.Chats.MessageSender do
   alias Messenger.Chats
   alias Messenger.AiProfiles
   alias Messenger.Serializer
-  alias Messenger.Ai.{MessageStreaming, CreateSummaryForChat, CreateTitleForChat}
+  alias Messenger.Ai.{MessageStreaming, CreateSummaryForChat, CreateTitleForChat, CreateOrchestratorMessage}
 
   def create_message(current_user, payload) do
     is_audio = Map.get(payload, "is_audio")
     content = Map.get(payload, "text")
     temp_id = Map.get(payload, "temp_id")
     chat_id = Map.get(payload, "chat_id")
+    chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
+
+    is_image_session = Map.get(payload, "is_image_session")
 
     case Chats.ChatsBuilder.build_ai_profile(current_user, payload) do
       nil ->
         {:error, "build profile error"}
-      {:ok, %{ai_model: ai_model, ai_profile: ai_profile}} ->
-        # IO.inspect(ai_model, label: "ПЭЁЛОАД КОТОРЫЙ ОТДАЛ В БИЛДЕР - МОДЕЛЬ")
-        # IO.inspect(ai_profile, label: "ПЭЁЛОАД КОТОРЫЙ ОТДАЛ В БИЛДЕР - ПРОФИЛЬ")
-        send_run(%{
-        "user_id" => current_user.id,
-        "user_status" => current_user.status,
-        "chat_id" => chat_id,
-        "temp_id" => temp_id,
-        "content" => content,
-        "is_audio" => is_audio,
-        "ai_profile" => ai_profile,
-        "ai_model" => ai_model
-        })
+      {:ok, %{ai_model: ai_model, image_ai_model: image_ai_model, ai_profile: ai_profile}} ->
+        unless is_image_session == true or chat.is_image_session == true do
+          send_run(%{
+            "user_id" => current_user.id,
+            "user_status" => current_user.status,
+            "chat_id" => chat_id,
+            "temp_id" => temp_id,
+            "content" => content,
+            "is_audio" => is_audio,
+            "ai_profile" => ai_profile,
+            "ai_model" => ai_model
+          })
+        else
+          send_orchestrator_run(current_user, %{
+            "chat_id" => chat_id,
+            "temp_id" => temp_id,
+            "content" => content,
+            "is_audio" => is_audio,
+            "ai_profile" => ai_profile,
+            "ai_model" => ai_model,
+            "image_ai_model" => image_ai_model
+          })
+        end
     end
   end
 
@@ -114,6 +127,63 @@ defmodule Messenger.Chats.MessageSender do
         })
         # Щупаем суммаризатор на его необходимость
         start_summary(user_id, user_status, ai_model, chat.id, chat.summarized_up_to_message_id)
+        {:ok, chat, message}
+    end
+  end
+
+  defp send_orchestrator_run(current_user, attrs) do
+    ai_model = Map.fetch!(attrs, "ai_model")
+    ai_profile = Map.fetch!(attrs, "ai_profile")
+    image_ai_model = Map.fetch!(attrs, "image_ai_model")
+    chat_id = Map.get(attrs, "chat_id")
+    content = Map.get(attrs, "content")
+    is_audio = Map.get(attrs, "is_audio")
+    temp_id = Map.get(attrs, "temp_id")
+
+    naming_ai_profile =  AiProfiles.get_default_system_user_ai_profile("naming", current_user.status)
+    serialized_ai_profile = Serializer.profile_for_api_serialize(ai_profile)
+    overrides = ai_profile |> Map.take([:temperature, :top_p, :presence_penalty, :frequency_penalty])
+
+    complete_attrs = %{
+      "ai_model_id" => ai_model.id,
+      "chat_id" => chat_id,
+      "content" => content,
+      "overrides" => overrides,
+      "user_id" => current_user.id,
+      "is_audio" => is_audio,
+      "image_ai_model_id" => image_ai_model.id,
+      "is_image_session" => true
+    }
+
+    case Chats.create_user_message(complete_attrs) do
+      {:error, _failed_step, _failed_value, _changesets} ->
+        {:error, IO.inspect(_changesets, label: "db_insert_failed")}
+
+      {:ok, %{chat: chat, message: message}} ->
+        # Если чата в вызове небыло, то стартуем нейминг, так как пишем в новом чате
+        unless chat_id do
+          CreateTitleForChat.start_generation(%{
+            "user_id" => current_user.id,
+            "chat_id" => chat.id,
+            "ai_model" => ai_model,
+            "ai_profile" => naming_ai_profile,
+            "content" => message.content
+          })
+        end
+
+        # Собираем контекст
+        context = Chats.get_ai_context(chat.id)
+
+        CreateOrchestratorMessage.start_generation(current_user, %{
+          "chat_id" => chat.id,
+          "ai_model" => ai_model,
+          "ai_profile" => serialized_ai_profile,
+          "image_ai_model" => image_ai_model,
+          "context" => context,
+          "content" => message.content,
+          "temp_id" => temp_id,
+          "request_id" => message.id
+        })
         {:ok, chat, message}
     end
   end
