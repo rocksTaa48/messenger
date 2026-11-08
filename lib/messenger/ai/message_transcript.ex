@@ -58,7 +58,7 @@ defmodule Messenger.Ai.MessageTranscript do
              "temp_id" => temp_id,
              "is_audio" => true,
              "ai_model_id" => ai_model_id,
-              "is_image_session" => is_image_session,
+             "is_image_session" => is_image_session,
              "profile_overrides" => profile_overrides
            }) do
       {:ok, chat, message} ->

@@ -11,7 +11,11 @@ defmodule MessengerWeb.TranscriptionController do
     temp_id = params["temp_id"]
     chat_id = params["chat_id"]
     ai_model_id = params["ai_model_id"]
-    is_image_session = params["is_image_session"] || false
+    is_image_session =
+      case Map.get(params, "is_image_session") do
+        "true" -> true
+        _ -> false
+      end
     ai_transcript_model = AiProfiles.get_ai_model(9)
     binary = File.read!(upload.path)
     base64 = Base.encode64(binary)
