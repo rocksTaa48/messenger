@@ -11,6 +11,7 @@ defmodule MessengerWeb.TranscriptionController do
     temp_id = params["temp_id"]
     chat_id = params["chat_id"]
     ai_model_id = params["ai_model_id"]
+    is_image_session = params["is_image_session"] || false
     ai_transcript_model = AiProfiles.get_ai_model(9)
     binary = File.read!(upload.path)
     base64 = Base.encode64(binary)
@@ -33,6 +34,7 @@ defmodule MessengerWeb.TranscriptionController do
       "chat_id" => chat_id,
       "ai_model_id" => ai_model_id,
       "profile_overrides" => profile_overrides || %{},
+      "is_image_session" => is_image_session || false,
       "ai_transcript_model" => ai_transcript_model,
       "temp_id" => temp_id,
       "base64" => base64,

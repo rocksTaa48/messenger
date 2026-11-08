@@ -124,9 +124,11 @@ export function sendMessage(
 export function sendVoiceMessage(blob: Blob, aiModelId: string | null = null, profileOverrides?: any) {
     const tempId = `temp-${Date.now()}`;
     let currentChatId: string | null = null;
+    let isImageSession = false;
 
     update(state => {
         currentChatId = state.active_chat?.id || null;
+        isImageSession = !currentChatId && (state.nav_context?.params?.is_image_session || false);
         const activeChat = state.active_chat || { id: '', messages: [], group_id: state.nav_context.params?.group_id };
         const newMessage = { id: tempId, temp_id: tempId, role: 'user', content: '', created_at: new Date().toISOString(), is_pending: true, is_audio: true, is_transcripted: false };
 
@@ -140,6 +142,7 @@ export function sendVoiceMessage(blob: Blob, aiModelId: string | null = null, pr
     formData.append('temp_id', tempId);
     if (!currentChatId && aiModelId) formData.append('ai_model_id', aiModelId);
     if (!currentChatId && profileOverrides) formData.append('profile_overrides', JSON.stringify(profileOverrides));
+    formData.append('is_image_session', String(isImageSession));
 
     fetch('/api/upload-audio', { method: 'POST', body: formData, headers: { 'Authorization': `Bearer ${initData}` } })
         .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })

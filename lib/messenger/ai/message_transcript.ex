@@ -36,6 +36,7 @@ defmodule Messenger.Ai.MessageTranscript do
     temp_id = Map.get(attrs, "temp_id")
     profile_overrides = Map.get(attrs, "profile_overrides")
     ai_transcript_model = Map.get(attrs, "ai_transcript_model")
+    is_image_session = Map.get(attrs, "is_image_session", false)
 
     Accounts.record_transaction(%{
       "user_id" => current_user.id,
@@ -57,6 +58,7 @@ defmodule Messenger.Ai.MessageTranscript do
              "temp_id" => temp_id,
              "is_audio" => true,
              "ai_model_id" => ai_model_id,
+              "is_image_session" => is_image_session,
              "profile_overrides" => profile_overrides
            }) do
       {:ok, chat, message} ->
