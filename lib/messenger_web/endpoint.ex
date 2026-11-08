@@ -36,6 +36,13 @@ defmodule MessengerWeb.Endpoint do
     plug Phoenix.Ecto.CheckRepoStatus, otp_app: :messenger
   end
 
+  plug Plug.Static,
+       at: "/images/generated",
+       from: {__MODULE__, :uploads_dir, []},
+       gzip: false
+
+  def uploads_dir, do: Application.fetch_env!(:messenger, :uploads_dir)
+
   plug Phoenix.LiveDashboard.RequestLogger,
     param_key: "request_logger",
     cookie_key: "request_logger"

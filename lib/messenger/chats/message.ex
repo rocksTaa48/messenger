@@ -27,13 +27,14 @@ defmodule Messenger.Chats.Message do
       :content,
       :chat_id,
       :request_id,
+      :status,
       :ai_model_id,
       :is_aborted,
       :is_audio,
       :metadata])
     |> validate_required([:role, :content, :chat_id, :ai_model_id])
     |> validate_inclusion(:role, ["user", "assistant"])
-    |> validate_inclusion(:status, ["pending", "send", "error"])
+    |> validate_inclusion(:status, ["pending", "send", "completed", "error"])
     |> validate_length(:content, min: 1, max: 16384)
     |> foreign_key_constraint(:chat_id)
   end

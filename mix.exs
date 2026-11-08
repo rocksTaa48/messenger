@@ -70,7 +70,8 @@ defmodule Messenger.MixProject do
       {:ecto_sql, "~> 3.13.5"},
       {:bcrypt_elixir, "~> 3.0"},
       {:cloak_ecto, "~> 1.3"},
-      {:langchain, "~> 0.13.1"}
+      {:langchain, "~> 0.13.1"},
+      {:image, "~> 0.73.0"}
     ]
   end
 

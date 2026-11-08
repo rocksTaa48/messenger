@@ -47,7 +47,6 @@ defmodule Messenger.Ai.CreateOrchestratorMessage do
     ai_model_id = Map.fetch!(attrs, "ai_model").id
     request_id = Map.fetch!(attrs, "request_id")
     chat_id = Map.get(attrs, "chat_id")
-    temp_id = Map.get(attrs, "temp_id")
     image_ai_model = Map.fetch!(attrs, "image_ai_model")
 
     case Chats.create_assistant_message(%{
@@ -93,7 +92,7 @@ defmodule Messenger.Ai.CreateOrchestratorMessage do
     Phoenix.PubSub.broadcast(
       Messenger.PubSub,
       "user:#{user_id}:lobby",
-      {:chat_title_error, %{chat_id: chat_id, reason: reason}}
+      {:ai_orchestrator_error, %{chat_id: chat_id, reason: reason}}
     )
   end
 

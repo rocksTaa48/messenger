@@ -130,23 +130,32 @@ defmodule Messenger.Chats do
   Функция забирает из БД сообщения пользователя в текущем чате
   """
   def get_chat_messages(chat_id, user_id, limit \\ 15, before_cursor \\ nil) do
-    query = from m in Message,
-                 where: m.role in ["user", "assistant"], # Исключаем system, его незачем видеть пользователю
-                 join: c in Chat, on: m.chat_id == c.id,
-                 where: c.id == ^chat_id and c.user_id == ^user_id,
-                 order_by: [desc: m.inserted_at],
-                 limit: ^limit
+    case Repo.get_by(Chat, id: chat_id, user_id: user_id) do
+      nil ->
+        []
 
-    query =
-      if before_cursor do
-        from m in query, where: m.inserted_at < ^before_cursor
-      else
-        query
-      end
+      chat ->
+        query = from m in Message,
+                     where: m.chat_id == ^chat.id and m.role in ["user", "assistant"],
+                     order_by: [desc: m.inserted_at],
+                     limit: ^limit
 
-    Repo.all(query)
-    |> Enum.reverse()
+        query = if before_cursor, do: from(m in query, where: m.inserted_at < ^before_cursor), else: query
+
+        messages = Repo.all(query)
+
+        if chat.is_image_session do
+          messages
+          |> Repo.preload(:chat_images)
+          |> Enum.reverse()
+        else
+          messages
+          |> Enum.reverse()
+        end
+    end
   end
+
+
 
   def get_last_message(chat_id) do
     Message
@@ -531,6 +540,16 @@ defmodule Messenger.Chats do
     }))
 
     |> Repo.transaction()
+  end
+
+  def mark_message_completed(message_id) do
+    case Repo.get_by(Message, id: message_id) do
+      nil -> {:error, :not_found}
+      message ->
+        message
+        |> Message.changeset(%{status: "completed"})
+        |> Repo.update()
+    end
   end
 
 

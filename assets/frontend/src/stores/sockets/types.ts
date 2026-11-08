@@ -118,6 +118,8 @@ export interface AppState {
             image_url?: string;
             image_media_type?: string;
             image_error?: string;
+            image_width?: number;
+            image_height?: number;
         }>;
         has_more_messages?: boolean;
     } | null;

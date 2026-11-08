@@ -86,9 +86,9 @@ defmodule MessengerWeb.SessionChannel do
     chat = Chats.get_chat(user_id, chat_id)
 
     # Загружаем сообщения активного чата
-    active_chat_data = case Chats.get_chat_messages(chat_id, user_id) do
+    active_chat_messages = case Chats.get_chat_messages(chat_id, user_id) do
       nil -> nil
-      chat -> Enum.map(chat, &Serializer.message_serialize/1) # Сериализация активного чата
+      messages -> Enum.map(messages, &Serializer.message_serialize(&1, chat)) # Сериализация сообщений активного чата
     end
 
     base_state
@@ -96,8 +96,8 @@ defmodule MessengerWeb.SessionChannel do
       "id" => chat_id,
       "group_id" => chat.group_id,
       "ai_model_id" => to_string(chat.ai_model_id),
-      "messages" => active_chat_data,
-      "has_more_messages" => length(active_chat_data) >= 15
+      "messages" => active_chat_messages,
+      "has_more_messages" => length(active_chat_messages) >= 15
     })
   end
 

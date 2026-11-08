@@ -4,7 +4,7 @@
 
 import { subscribe, send, initSession as initSessionCore } from './sockets/core';
 import { registerStreamingListeners, stopGeneration, retryLastMessage } from './sockets/streaming';
-import { registerChatListeners, sendMessage, sendVoiceMessage } from './sockets/chat';
+import { registerChatListeners, sendMessage, sendVoiceMessage, downloadOriginalImage, sendImageToTelegram } from './sockets/chat';
 import { registerPaymentListeners, createPaymentInvoice, resetPaymentState } from './sockets/payment';
 import { goBack, goTo, requestDataForScreen } from './sockets/nav';
 
@@ -28,6 +28,8 @@ export const appState = {
     // --- Чаты ---
     sendMessage,
     sendVoiceMessage,
+    downloadOriginalImage,
+    sendImageToTelegram,
 
     // --- Стриминг ---
     stopGeneration,

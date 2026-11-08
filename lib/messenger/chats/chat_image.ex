@@ -5,6 +5,7 @@ defmodule Messenger.Chats.ChatImage do
   schema "chat_images" do
     field :metadata, :map, default: %{}
     field :storage_key, :string
+    field :thumb_storage_key, :string
     belongs_to :message, Messenger.Chats.Message
     field :parent_image_id, :id
 
@@ -14,7 +15,7 @@ defmodule Messenger.Chats.ChatImage do
   @doc false
   def changeset(chat_image, attrs) do
     chat_image
-    |> cast(attrs, [:metadata, :message_id, :parent_image_id, :storage_key])
+    |> cast(attrs, [:metadata, :message_id, :parent_image_id, :storage_key, :thumb_storage_key])
     |> validate_required([:storage_key, :message_id])
   end
 end

@@ -40,5 +40,5 @@ npm-debug.log
 /.env
 /.environments/*
 .env
-/priv/static/images/generated/*
-!/priv/static/images/generated/.gitkeep
+/priv/uploads/*
+!/priv/uploads/.gitkeep

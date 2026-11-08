@@ -21,6 +21,8 @@ defmodule MessengerWeb.Router do
   scope "/api", MessengerWeb do
     pipe_through :api
     post "/upload-audio", TranscriptionController, :upload # Отправка аудиосообщения на бэк
+    get "/images/download/*filepath", ImageController, :download # Скачивание исходника картинки
+    post "/images/send-to-telegram", ImageController, :send_to_telegram # Постим картинку пользователю от ботана
   end
 
   scope "/", MessengerWeb do

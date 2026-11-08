@@ -49,12 +49,14 @@
 
     // =================================== Реактивные данные из стора ==================================================
     $: activeChat = $appState?.active_chat;
-    $: messages = activeChat?.messages || [];
+    $: messages = activeChat ? [...(activeChat.messages || [])] : [];
+    $: isImageSession = activeChat?.is_image_session === true;
+    $: aiModels = $appState?.ai_models || [];
+
     $: isGenerating = messages.some(msg => msg.is_streaming === true) || false;
-    $: lastStreamingAssistant = [...messages].reverse().find(
-        m => m.role === 'assistant' && m.is_streaming === true
-    );
+    $: lastStreamingAssistant = [...messages].reverse().find(m => m.role === 'assistant' && m.is_streaming === true);
     $: isAwaitingFirstToken = !!activeChat?.awaiting_response;
+
     $: isThink = !!lastStreamingAssistant && (lastStreamingAssistant.content || '').trim().length === 0;
     $: isTyping = !!lastStreamingAssistant && (lastStreamingAssistant.content || '').trim().length > 0;
     $: currentChatInfo = $appState?.chats_list.find(c =>
@@ -398,6 +400,13 @@
     }
 
     function handleClose() { isChatSettingsOpen = false; }
+
+    function handleImageLoaded() {
+        // Картинка загрузилась и отрисовалась — скроллим вниз, если мы были внизу
+        if (isNearBottom && scrollContainer) {
+            scrollToBottomImmediate();
+        }
+    }
 </script>
 <div class="relative flex flex-col h-full w-full min-w-0 bg-[#0f0f0f] rounded-[24px] text-white font-sans overflow-hidden">
 
@@ -420,8 +429,17 @@
                         <span class="inline-block animate-pulse">...</span>
                     {/if}
                 </span>
-                <span class="text-[10px] font-medium transition-colors duration-300 {isGenerating ? 'text-[#2481cc]' : 'text-emerald-400/80'}">
-                    {#if isTyping}
+                <span class="text-[10px] font-medium transition-colors duration-300 {(isGenerating || (isImageSession && isAwaitingFirstToken)) ? 'text-[#2481cc]' : 'text-emerald-400/80'}">
+                    {#if isImageSession && isAwaitingFirstToken}
+                        <span class="inline-flex items-center gap-1">
+                            <span class="animate-pulse">generating</span>
+                            <span class="flex gap-0.5">
+                                <span class="w-1 h-1 bg-current rounded-full animate-bounce" style="animation-delay: 0s"></span>
+                                <span class="w-1 h-1 bg-current rounded-full animate-bounce" style="animation-delay: 0.2s"></span>
+                                <span class="w-1 h-1 bg-current rounded-full animate-bounce" style="animation-delay: 0.4s"></span>
+                            </span>
+                        </span>
+                    {:else if isTyping}
                         <span class="inline-flex items-center gap-1">
                             <span class="animate-pulse">typing</span>
                             <span class="flex gap-0.5">
@@ -473,7 +491,14 @@
                 {/if}
             </div>
 
-            <Message {messages} {formatTime} />
+            <Message {messages}
+                     {isImageSession}
+                     {aiModels}
+                     {formatTime}
+                     on:imageLoaded={handleImageLoaded}
+
+            />
+
         </div>
     </div>
 

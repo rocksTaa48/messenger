@@ -13,4 +13,6 @@
 
 /.git
 /.gitignore
+/priv/uploads/*
+!/priv/uploads/.gitkeep
 .DS_Store

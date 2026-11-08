@@ -1,8 +1,8 @@
 defmodule Messenger.Serializer do
 
   # Сериализуем сообщение
-  def message_serialize(message) do
-    %{
+  def message_serialize(message, chat \\ nil) do
+    base = %{
       "id" => to_string(message.id),
       "content" => message.content,
       "role" => message.role,
@@ -12,6 +12,40 @@ defmodule Messenger.Serializer do
       "is_aborted" => message.is_aborted || false,
       "cursor_timestamp" => DateTime.to_iso8601(message.inserted_at)
     }
+
+    is_image_session = is_struct(chat) && chat.is_image_session == true
+
+    if is_image_session && message.role == "assistant" do
+      # chat_images уже preloaded (get_chat_messages делает preload для image-сессий).
+      image =
+        case message.chat_images do
+          [img | _] -> img
+          _ -> nil
+        end
+
+      {image_url, media_type, thumb_height, thumb_width} =
+        case image do
+          nil -> {nil, nil}
+          # Подгружаем пожатые файлы, что бы сокет не прихуел
+          img -> {"/images/generated/#{img.thumb_storage_key}",
+                   img.metadata["thumb_media_type"] || "image/png",
+                   img.metadata["thumb_height"],
+                   img.metadata["thumb_width"]
+                 }
+        end
+
+      base
+      |> Map.put("content", "")
+      |> Map.put("is_image", true)
+      |> Map.put("image_url", image_url)
+      |> Map.put("image_width", thumb_width)
+      |> Map.put("image_height", thumb_height)
+      |> Map.put("image_media_type", media_type)
+      |> Map.put("is_pending", is_nil(image_url) && message.status == "pending")
+      |> Map.put("image_error", if(message.status == "error" and is_nil(image_url), do: message.error, else: nil))
+    else
+      base
+    end
   end
 
   # Сериализуем группу чатов

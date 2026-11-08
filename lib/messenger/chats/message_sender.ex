@@ -10,14 +10,15 @@ defmodule Messenger.Chats.MessageSender do
     temp_id = Map.get(payload, "temp_id")
     chat_id = Map.get(payload, "chat_id")
     chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
+    chat_is_image_session = chat && Map.get(chat, :is_image_session, false)
 
-    is_image_session = Map.get(payload, "is_image_session")
+    is_image_session = Map.get(payload, "is_image_session", false)
 
     case Chats.ChatsBuilder.build_ai_profile(current_user, payload) do
       nil ->
         {:error, "build profile error"}
       {:ok, %{ai_model: ai_model, image_ai_model: image_ai_model, ai_profile: ai_profile}} ->
-        unless is_image_session == true or chat.is_image_session == true do
+        unless is_image_session == true or chat_is_image_session == true do
           send_run(%{
             "user_id" => current_user.id,
             "user_status" => current_user.status,
@@ -61,7 +62,7 @@ defmodule Messenger.Chats.MessageSender do
               nil ->
                 {:error, :build_profile_failed}
 
-              {:ok, %{ai_model: ai_model, ai_profile: ai_profile}} ->
+              {:ok, %{ai_model: ai_model, image_ai_model: image_ai_model, ai_profile: ai_profile}} ->
                 serialized_ai_profile = Serializer.profile_for_api_serialize(ai_profile)
                 trigger_stream(current_user, chat, message, ai_model, serialized_ai_profile, temp_id)
                 {:ok, chat, message}

@@ -10,8 +10,6 @@ defmodule MessengerWeb.Actions.ChatActions do
   NEW:                Функция 'click_new' подготавливает нам создание нового чата
   """
   def handle_in("click_new", payload, socket) do
-    IO.inspect(payload, label: "ПАРАМСЫ ПЕРЕДАННЫЕ при click_new_message")
-
     current_user = socket.assigns.current_user
     ai_model_id = current_user.ai_model_id
     ai_models = AiProfiles.get_all_users_ai_models()
@@ -38,10 +36,10 @@ defmodule MessengerWeb.Actions.ChatActions do
   def handle_in("click_open", payload, socket) do
     current_user = socket.assigns.current_user
     chat_id = Map.get(payload, "chat_id")
-    messages = Chats.get_chat_messages(chat_id, current_user.id)
-    serialized_messages = Enum.map(messages, &Serializer.message_serialize/1)
-    ai_models = AiProfiles.get_all_users_ai_models()
     chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
+    messages = Chats.get_chat_messages(chat.id, current_user.id)
+    serialized_messages = Enum.map(messages, &Serializer.message_serialize(&1, chat))
+    ai_models = AiProfiles.get_all_users_ai_models()
 
     case Chats.ChatsBuilder.build_ai_profile(current_user, payload) do
       {:ok, %{ai_model: ai_model, ai_profile: ai_profile}} ->
@@ -57,6 +55,7 @@ defmodule MessengerWeb.Actions.ChatActions do
           "group_id" => chat.group_id,
           "profile_overrides" => chat.profile_overrides,
           "ai_model_id" => to_string(chat.ai_model_id),
+          "is_image_session" => chat.is_image_session || false,
           "messages" => serialized_messages,
           "has_more_messages" => length(serialized_messages) >= 15
         })
@@ -76,6 +75,7 @@ defmodule MessengerWeb.Actions.ChatActions do
     current_active_chat = socket.assigns.state["active_chat"]
     current_messages = current_active_chat["messages"]
     chat_id = String.to_integer(payload["chat_id"])
+    chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
 
     case List.first(current_messages) do
       nil ->
@@ -92,7 +92,7 @@ defmodule MessengerWeb.Actions.ChatActions do
         end
 
         older_messages = Chats.get_chat_messages(chat_id, current_user.id, 15, cursor_dt)
-        formatted_older = Enum.map(older_messages, &Serializer.message_serialize/1)
+        formatted_older = Enum.map(older_messages, &Serializer.message_serialize(&1, chat))
 
         if Enum.empty?(formatted_older) do
           new_active_chat = Map.put(current_active_chat, "has_more_messages", false)

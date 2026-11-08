@@ -11,11 +11,12 @@ defmodule Messenger.Chats.ChatsBuilder do
   def build_ai_profile(current_user, payload \\ %{}) do
 
     chat_id = Map.get(payload, "chat_id")
-    is_image_session = Map.get(payload, "is_image_session")
+    is_image_session = Map.get(payload, "is_image_session", false)
     chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
+    chat_is_image_session = chat && Map.get(chat, :is_image_session, false)
 
     default_user_ai_profile =
-      unless is_image_session == true or chat.is_image_session == true do
+      unless is_image_session == true or chat_is_image_session == true do
         AiProfiles.get_default_user_ai_profile(current_user.status) # Если просто чат text -> text
       else
         AiProfiles.get_orchestrator_profile(current_user.status) # Если чат text -> image

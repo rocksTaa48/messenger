@@ -120,6 +120,8 @@ export function registerStreamingListeners(channel: Channel) {
         ai_model_id?: string;
     }) => {
         update(state => {
+            console.log('[ai:orchestrator_done] received:', payload);
+
             const targetChatId = String(payload.chat_id);
 
             const chats_list = state.chats_list.map(chat =>
@@ -159,6 +161,7 @@ export function registerStreamingListeners(channel: Channel) {
                 id: payload.chat_id as string,
                 awaiting_response: true,              // держим индикатор «AI думает»
                 last_error_reason: null,
+                is_image_session: true,
                 messages,
             };
 
@@ -171,7 +174,10 @@ export function registerStreamingListeners(channel: Channel) {
         message_id: number;
         image_url: string;
         media_type?: string;
+        image_width?: number;
+        image_height?: number;
     }) => {
+        console.log('[ai:image_done] received:', payload);
         update(state => {
             const targetChatId = String(payload.chat_id);
 
@@ -195,6 +201,8 @@ export function registerStreamingListeners(channel: Channel) {
                         ...m,
                         image_url: payload.image_url,
                         image_media_type: payload.media_type || 'image/png',
+                        image_width: payload.image_width,
+                        image_height: payload.image_height,
                         image_error: undefined,
                         is_pending: false,
                     }

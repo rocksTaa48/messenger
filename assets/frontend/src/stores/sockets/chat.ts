@@ -152,3 +152,68 @@ export function sendVoiceMessage(blob: Blob, aiModelId: string | null = null, pr
             });
         });
 }
+
+export function downloadOriginalImage(url: string, filename: string = 'generated-image.webp') {
+    const initData = (window as any).Telegram?.WebApp?.initData || '';
+
+    fetch(url, {
+        headers: {
+            'Authorization': `Bearer ${initData}`
+        }
+    })
+        .then(async response => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = filename;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(blobUrl);
+        })
+        .catch(error => {
+            console.error('[downloadOriginalImage] failed:', error);
+        });
+}
+
+export function sendImageToTelegram(imageUrl: string) {
+    const initData = (window as any).Telegram?.WebApp?.initData || '';
+
+    // Показываем нативный лоадер Telegram
+    (window as any).Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
+
+    fetch('/api/images/send-to-telegram', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${initData}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ image_url: imageUrl })
+    })
+        .then(async response => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+            const data = await response.json();
+            console.log('[sendImageToTelegram] Success:', data);
+
+            // Показываем нативное уведомление Telegram об успехе
+            (window as any).Telegram?.WebApp?.showPopup({
+                title: 'Готово!',
+                message: 'Изображение отправлено вам в личные сообщения бота.',
+                buttons: [{ type: 'ok' }]
+            });
+        })
+        .catch(error => {
+            console.error('[sendImageToTelegram] failed:', error);
+            (window as any).Telegram?.WebApp?.showPopup({
+                title: 'Ошибка',
+                message: 'Не удалось отправить изображение. Попробуйте позже.',
+                buttons: [{ type: 'ok' }]
+            });
+        });
+}
