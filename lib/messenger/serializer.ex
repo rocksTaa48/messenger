@@ -25,7 +25,7 @@ defmodule Messenger.Serializer do
 
       {image_url, media_type, thumb_height, thumb_width} =
         case image do
-          nil -> {nil, nil}
+          nil -> {nil, nil, nil, nil}
           # Подгружаем пожатые файлы, что бы сокет не прихуел
           img -> {"/images/generated/#{img.thumb_storage_key}",
                    img.metadata["thumb_media_type"] || "image/png",
