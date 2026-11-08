@@ -20,7 +20,7 @@ RUN npm run build
 # ==========================================
 FROM hexpm/elixir:1.19.7-erlang-28.4.3-alpine-3.23.7 AS elixir-builder
 
-RUN apk add --no-cache build-base git
+RUN apk add --no-cache build-base git vips-dev
 
 WORKDIR /messenger
 
@@ -55,7 +55,15 @@ RUN mix release
 FROM alpine:3.23.7
 
 # Устанавливаем необходимые зависимости для работы Erlang
-RUN apk add --no-cache libstdc++ openssl ncurses-libs tzdata
+RUN apk add --no-cache \
+    libstdc++ \
+    openssl \
+    ncurses-libs \
+    tzdata \
+    vips \
+    libjpeg-turbo \
+    libpng \
+    libwebp
 
 # Фиксируем рабочую директорию
 WORKDIR /messenger
