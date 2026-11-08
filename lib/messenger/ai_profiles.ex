@@ -62,6 +62,13 @@ defmodule Messenger.AiProfiles do
     |> Repo.all()
   end
 
+  def get_all_users_llm_ai_models do
+    AiModel
+    |> where(is_active: true)
+    |> where(type: "llm")
+    |> Repo.all()
+  end
+
   def get_all_users_image_ai_models do
     AiModel
     |> where(is_active: true)
