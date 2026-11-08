@@ -38,15 +38,16 @@ RUN mix deps.compile
 # Копируем конфигурацию
 COPY config config
 
-# Копируем фронтенд
-COPY --from=frontend-builder /messenger/priv/static ./priv/static
-
 # Копируем остальной код приложения
 COPY lib lib
 COPY priv priv
 
+# Копируем фронтенд
+COPY --from=frontend-builder /messenger/priv/static ./priv/static
+
 # Компилируем приложение и собираем релиз
 RUN mix compile
+RUN mix phx.digest
 RUN mix release
 
 # ==========================================
