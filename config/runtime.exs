@@ -62,10 +62,5 @@ if config_env() in [:dev, :prod] do
     pool_size: String.to_integer(db_poolsize),
     socket_options: maybe_ipv6
 
-
-  secret_key_base = System.get_env("SECRET_KEY_BASE")
-
-  host = System.get_env("PHX_HOST") || "example.com"
-
   config :messenger, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 end
