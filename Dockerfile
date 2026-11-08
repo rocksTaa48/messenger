@@ -75,6 +75,8 @@ COPY --from=elixir-builder /messenger/_build/prod/rel/messenger ./
 # Копируем скрипт
 COPY entrypoint.sh ./
 
+RUN mkdir -p /messenger/priv/uploads
+
 # Делаем скрипт исполняемым и отдаем всю папку пользователю nobody
 RUN chmod +x entrypoint.sh && chown -R nobody:root /messenger
 

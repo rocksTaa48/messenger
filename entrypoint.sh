@@ -16,4 +16,11 @@ echo "=== Running Ecto Migrations ==="
 # /messenger/bin/messenger eval "Messenger.Release.seed()"
 
 echo "=== Starting Phoenix Server ==="
-exec /messenger/bin/messenger start
+if [ $# -gt 0 ]; then
+  echo "=== Executing Custom Command ==="
+  exec "$@"
+else
+  # Если аргументов нет — запускаем обычный веб-сервер с флагом PHOENIX_SERVER
+  echo "=== Starting Phoenix Server ==="
+  PHOENIX_SERVER=true exec /messenger/bin/messenger start
+fi
