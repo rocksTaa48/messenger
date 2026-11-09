@@ -61,7 +61,7 @@
     // =================================== Реактивные данные из стора ==================================================
     $: activeChat = $appState?.active_chat;
     $: messages = activeChat ? [...(activeChat.messages || [])] : [];
-    $: isImageSession = activeChat?.is_image_session === true;
+    $: isImageSession = activeChat?.is_image_session === true || appState.nav_context?.params?.is_image_session || false;
     $: aiModels = $appState?.ai_models || [];
 
     $: isGenerating = messages.some(msg => msg.is_streaming === true) || false;
