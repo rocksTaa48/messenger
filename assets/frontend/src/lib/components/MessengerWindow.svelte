@@ -627,6 +627,7 @@
             currentTopP={currentTopP}
             currentTemperature={currentTemperature}
             currentTier={$appState.user?.status || 'free'}
+            isImageSession={isImageSession}
             on:apply={handleAiModelSelect}
             on:close={handleClose}
     />
