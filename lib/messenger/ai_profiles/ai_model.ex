@@ -49,6 +49,7 @@ defmodule Messenger.AiProfiles.AiModel do
       :cost_updated_at,
       :config])
     |> validate_required([:model_name, :openrouter_model_id, :is_active, :tier])
+    |> validate_inclusion(:type, ["llm", "image", "transcript"])
     |> unique_constraint([:provider, :model_name], name: :ai_models_provider_model_name_index)
 
   end

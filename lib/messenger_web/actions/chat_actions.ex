@@ -12,7 +12,7 @@ defmodule MessengerWeb.Actions.ChatActions do
   def handle_in("click_new", payload, socket) do
     current_user = socket.assigns.current_user
     ai_model_id = current_user.ai_model_id
-    ai_models = AiProfiles.get_all_users_llm_ai_models()
+    ai_models = AiProfiles.get_all_users_ai_models()
     case Chats.ChatsBuilder.build_ai_profile(current_user, payload) do
       {:ok, %{ai_model: ai_model, ai_profile: ai_profile}} ->
       formatted_ai_models = Enum.map(ai_models, &Serializer.ai_model_serialize/1)
@@ -39,7 +39,7 @@ defmodule MessengerWeb.Actions.ChatActions do
     chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
     messages = Chats.get_chat_messages(chat.id, current_user.id)
     serialized_messages = Enum.map(messages, &Serializer.message_serialize(&1, chat))
-    ai_models = AiProfiles.get_all_users_llm_ai_models()
+    ai_models = AiProfiles.get_all_users_ai_models()
 
     case Chats.ChatsBuilder.build_ai_profile(current_user, payload) do
       {:ok, %{ai_model: ai_model, ai_profile: ai_profile}} ->
@@ -251,7 +251,7 @@ defmodule MessengerWeb.Actions.ChatActions do
     case action_result do
         {:ok, chat} ->
           messages = Chats.get_chat_messages(chat.id, current_user.id)
-          serialized_messages = Enum.map(messages, &Serializer.message_serialize/1)
+          serialized_messages = Enum.map(messages, &Serializer.message_serialize(&1, chat))
           new_state = socket.assigns.state
                       |> Map.put("active_chat", %{
             "id" => chat.id,

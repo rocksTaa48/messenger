@@ -42,6 +42,10 @@
     let pendingParams: { temperature: number; topP: number; frequencyPenalty: number; presencePenalty: number } | null = null;
 
     $: ai_models = $appState?.ai_models || [];
+
+    $: llmAiModels = ai_models.filter(m => m.type === 'llm');
+    $: imageAiModels = ai_models.filter(m => m.type === 'image');
+
     $: userStatus = $appState?.user_status || currentTier;
     $: selectedModel = ai_models.find(m => m.id === selectedAiModelId);
 
@@ -177,7 +181,7 @@
 
                         {#if isDropdownOpen}
                             <div class="absolute top-full left-0 right-0 mt-2 bg-[#121212] border border-white/10 rounded-2xl max-h-60 overflow-y-auto z-20 shadow-xl scrollbar-none" transition:fly={{ y: -10, duration: 200 }}>
-                                {#each ai_models as model}
+                                {#each llmAiModels as model}
                                     {@const isAccessible = isModelAccessible(model.tier)}
                                     {@const isSelected = selectedAiModelId === model.id}
                                     <button on:click={() => handleModelClick(model.id, isAccessible)} disabled={!isAccessible} class="w-full text-left p-3.5 flex items-center justify-between transition-colors border-b border-white/5 last:border-0 overflow-hidden {isSelected ? 'bg-[#2481cc]/10' : 'hover:bg-white/5'} {!isAccessible ? 'opacity-60' : ''}">

@@ -84,6 +84,7 @@ defmodule Messenger.Serializer do
       "display_description" => ai_model.display_description || "Без описания",
       "display_icon" => ai_model.display_icon || "",
       "tier" => ai_model.tier || "Отсутствует",
+      "type" => ai.model.type || "llm",
 
       "timestamp" => DateTime.to_iso8601(ai_model.inserted_at),
     }

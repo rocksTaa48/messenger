@@ -46,6 +46,7 @@ export interface AppState {
         display_icon: string;
         display_color: string;
         tier: string;
+        type: string;
     } | null;
 
     profile_overrides?: {
