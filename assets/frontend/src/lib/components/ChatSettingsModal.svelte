@@ -10,17 +10,17 @@
 
     export let isOpen = false;
     export let currentAiModelId: string | null = null;
+    export let currentImageAiModelId: string | null = null;
     export let currentTemperature: number | null = null;
     export let currentTopP: number | null = null;
     export let currentFrequencyPenalty: number | null = null;
     export let currentPresencePenalty: number | null = null;
-    export let currentImageAiModelId: string | null = null; // текущая image модель
     export let isImageSession = false;
     export let currentTier: string = 'free';
 
     const dispatch = createEventDispatcher<{
         apply: {
-            aiModelId: string;
+            aiModelId: string | null;
             imageAiModelId: string | null;
             temperature: number;
             topP: number;
@@ -30,37 +30,29 @@
         close: void;
     }>();
 
-    // Базовые статусы дропдаунов
     let selectedAiModelId: string | null = null;
     let isDropdownOpen = false;
 
-    let selectedAiImageModelId: string | null = null;
+    let selectedImageAiModelId: string | null = null;
     let isImageDropdownOpen = false;
 
-    // Локальные значения параметров (живут пока открыта модалка)
     let temperature = 0.7;
     let topP = 1.0;
     let frequencyPenalty = 0.0;
     let presencePenalty = 0.0;
 
-    // Состояние вложенных модалок
     let isParamsOpen = false;
     let isWarningOpen = false;
     let pendingParams: { temperature: number; topP: number; frequencyPenalty: number; presencePenalty: number } | null = null;
 
-    // Тянем все модели из стора
     $: ai_models = $appState?.ai_models || [];
-
-    // Делим модели на текстовые и генеративные
     $: llmAiModels = ai_models.filter(m => m.type === 'llm');
     $: imageAiModels = ai_models.filter(m => m.type === 'image');
 
-    // Достаем статус пользователя что бы отсечь выбор 'Premium' моделей (на бэке своя проверка валидатором)
     $: userStatus = $appState?.user_status || currentTier;
     $: selectedModel = ai_models.find(m => m.id === selectedAiModelId);
     $: selectedImageAiModel = imageAiModels.find(m => m.id === selectedImageAiModelId);
 
-    // При открытии инициализируем всё из пропсов
     $: if (isOpen) {
         selectedAiModelId = currentAiModelId;
         selectedImageAiModelId = currentImageAiModelId;
@@ -69,6 +61,7 @@
         frequencyPenalty = currentFrequencyPenalty ?? 0.0;
         presencePenalty = currentPresencePenalty ?? 0.0;
         isDropdownOpen = false;
+        isImageDropdownOpen = false; // ← Сброс при открытии
         isParamsOpen = false;
         isWarningOpen = false;
         pendingParams = null;
@@ -83,10 +76,11 @@
 
     function close() {
         isDropdownOpen = false;
+        isImageDropdownOpen = false;
         dispatch('close');
     }
 
-    function handleModelClick(modelId: string, isAccessible: boolean) {
+    function handleAiModelClick(modelId: string, isAccessible: boolean) {
         if (!isAccessible) {
             if (WebApp.HapticFeedback) WebApp.HapticFeedback.notificationOccurred('error');
             return;
@@ -96,28 +90,42 @@
         if (WebApp.HapticFeedback) WebApp.HapticFeedback.selectionChanged();
     }
 
+    function handleImageAiModelClick(modelId: string, isAccessible: boolean) {
+        if (!isAccessible) {
+            if (WebApp.HapticFeedback) WebApp.HapticFeedback.notificationOccurred('error');
+            return;
+        }
+        selectedImageAiModelId = modelId;
+        isImageDropdownOpen = false;
+        if (WebApp.HapticFeedback) WebApp.HapticFeedback.selectionChanged();
+    }
+
     function toggleDropdown() {
         isDropdownOpen = !isDropdownOpen;
+        isImageDropdownOpen = false;
         if (WebApp.HapticFeedback) WebApp.HapticFeedback.impactOccurred('light');
     }
 
-    // --- Логика параметров ---
+    function toggleImageDropdown() {
+        isImageDropdownOpen = !isImageDropdownOpen;
+        isDropdownOpen = false;
+        if (WebApp.HapticFeedback) WebApp.HapticFeedback.impactOccurred('light');
+    }
+
     function openParamsModal() {
         isParamsOpen = true;
         if (WebApp.HapticFeedback) WebApp.HapticFeedback.impactOccurred('light');
     }
 
     function handleParamsApply(event: CustomEvent) {
-        pendingParams = event.detail; // Сохраняем новые значения во временную переменную
-        isParamsOpen = false;         // Закрываем модалку параметров
-        isWarningOpen = true;         // Открываем ворнинг
+        pendingParams = event.detail;
+        isParamsOpen = false;
+        isWarningOpen = true;
     }
 
     function handleWarningConfirm() {
         isWarningOpen = false;
         if (WebApp.HapticFeedback) WebApp.HapticFeedback.impactOccurred('medium');
-
-        // Пользователь подтвердил — применяем новые значения локально
         if (pendingParams) {
             temperature = pendingParams.temperature;
             topP = pendingParams.topP;
@@ -125,20 +133,20 @@
             presencePenalty = pendingParams.presencePenalty;
         }
         pendingParams = null;
-        // Остаемся в ChatSettingsModal!
     }
 
     function handleWarningCancel() {
         isWarningOpen = false;
-        pendingParams = null; // Сбрасываем неподтвержденные изменения
-        // Локальные переменные temperature, topP и т.д. остались прежними (откат)
-        // Остаемся в ChatSettingsModal!
+        pendingParams = null;
     }
 
-    // Главная кнопка "Применить" — отправляем всё в родителя
     function handleMainApply() {
         if (WebApp.HapticFeedback) WebApp.HapticFeedback.impactOccurred('medium');
-        if (selectedAiModelId) {
+
+        // Проверяем валидность в зависимости от режима
+        const isValid = isImageSession ? !!selectedImageAiModelId : !!selectedAiModelId;
+
+        if (isValid) {
             dispatch('apply', {
                 aiModelId: selectedAiModelId,
                 imageAiModelId: selectedImageAiModelId,
@@ -271,10 +279,7 @@
                 {#if !isImageSession}
                     <div class="space-y-2 pt-2">
                         <label class="text-sm font-medium text-gray-400 ml-1">Дополнительно</label>
-                        <button
-                                on:click={openParamsModal}
-                                class="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all active:scale-[0.98]"
-                        >
+                        <button on:click={openParamsModal} class="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all active:scale-[0.98]">
                             <div class="flex items-center gap-3">
                                 <div class="w-10 h-10 rounded-xl bg-[#2481cc]/10 flex items-center justify-center">
                                     <Settings2 size={20} class="text-[#2481cc]" />
@@ -302,7 +307,7 @@
         </div>
     </div>
 {/if}
-<!-- Вложенные модалки -->
+
 <ParametersModal
         isOpen={isParamsOpen}
         initialTemperature={temperature}
