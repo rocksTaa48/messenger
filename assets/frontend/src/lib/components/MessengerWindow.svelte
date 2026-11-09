@@ -444,13 +444,13 @@
     <ChatSettingsModal
             bind:isOpen={isChatSettingsOpen}
             currentAiModelId={currentAiModelId}
-            currentImageAiModelId={currentImageAiModelId}  <!-- ← НОВОЕ -->
+            currentImageAiModelId={currentImageAiModelId}
     currentFrequencyPenalty={currentFrequencyPenalty}
     currentPresencePenalty={currentPresencePenalty}
     currentTopP={currentTopP}
     currentTemperature={currentTemperature}
     currentTier={$appState.user?.status || 'free'}
-    isImageSession={isImageSession}                <!-- ← НОВОЕ -->
+    isImageSession={isImageSession}
     on:apply={handleAiModelSelect}
     on:close={handleClose}
     />
