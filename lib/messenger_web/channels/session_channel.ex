@@ -104,6 +104,8 @@ defmodule MessengerWeb.SessionChannel do
       "group_id" => chat.group_id,
       "ai_model_id" => to_string(chat.ai_model_id),
       "messages" => active_chat_messages,
+      "profile_overrides" => chat.profile_overrides,
+      "is_image_session" => chat.is_image_session || false,
       "has_more_messages" => length(active_chat_messages) >= 15
     })
     |> Map.put("image_session", serialized_image_session)

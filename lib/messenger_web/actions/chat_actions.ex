@@ -50,7 +50,6 @@ defmodule MessengerWeb.Actions.ChatActions do
          {:ok, %{ai_model: ai_model, image_session: image_session, ai_profile: ai_profile}} <-
            Chats.ChatsBuilder.build_ai_profile(current_user, data) do
       chat = if data.chat_id, do: Chats.get_chat(current_user.id, data.chat_id), else: nil
-      IO.inspect(chat, label: "CHAT СОДЕРЖИМОЕ")
 
       messages = Chats.get_chat_messages(chat.id, current_user.id)
       serialized_messages = Enum.map(messages, &Serializer.message_serialize(&1, chat))
