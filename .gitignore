@@ -42,3 +42,5 @@ npm-debug.log
 .env
 /priv/uploads/*
 !/priv/uploads/.gitkeep
+/caddy/logs/*
+!/caddy/logs/.gitkeep
