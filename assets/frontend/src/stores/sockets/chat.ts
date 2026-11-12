@@ -68,6 +68,7 @@ export function registerChatListeners(channel: Channel) {
 export function sendMessage(
     text: string,
     aiModelId: string | null = null,
+    imageAiModelId: string | null = null,
     profileOverrides?: { temperature: number, topP: number, frequencyPenalty: number, presencePenalty: number }
 ) {
     if (!text.trim()) return;
@@ -96,6 +97,7 @@ export function sendMessage(
         chat_id: currentChatId, text, temp_id: tempId,
         ...(currentChatId ? {} : {
             ai_model_id: aiModelId ? Number(aiModelId) : undefined,
+            image_ai_model_id: imageAiModelId ? Number(imageAiModelId) : undefined,
             profile_overrides: overrides,
             is_image_session: isImageSession
         }),
@@ -121,7 +123,12 @@ export function sendMessage(
     });
 }
 
-export function sendVoiceMessage(blob: Blob, aiModelId: string | null = null, profileOverrides?: any) {
+export function sendVoiceMessage(
+    blob: Blob,
+    aiModelId: string | null = null,
+    imageAiModelId: string | null = null,
+    profileOverrides?: any,
+) {
     const tempId = `temp-${Date.now()}`;
     let currentChatId: string | null = null;
     let isImageSession = false;
@@ -141,6 +148,7 @@ export function sendVoiceMessage(blob: Blob, aiModelId: string | null = null, pr
     if (currentChatId) formData.append('chat_id', currentChatId);
     formData.append('temp_id', tempId);
     if (!currentChatId && aiModelId) formData.append('ai_model_id', aiModelId);
+    if (!currentChatId && imageAiModelId) formData.append('image_ai_model_id', imageAiModelId);
     if (!currentChatId && profileOverrides) formData.append('profile_overrides', JSON.stringify(profileOverrides));
     formData.append('is_image_session', String(isImageSession));
 

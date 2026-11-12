@@ -5,28 +5,36 @@ defmodule MessengerWeb.Actions.ChatActions do
   alias Messenger.Chats
   alias Messenger.AiProfiles
   alias Messenger.Serializer
+  alias Messenger.Chats.PayloadParams
 
   @doc"""
   NEW:                Функция 'click_new' подготавливает нам создание нового чата
   """
   def handle_in("click_new", payload, socket) do
     current_user = socket.assigns.current_user
-    ai_model_id = current_user.ai_model_id
     ai_models = AiProfiles.get_all_users_ai_models()
-    case Chats.ChatsBuilder.build_ai_profile(current_user, payload) do
-      {:ok, %{ai_model: ai_model, ai_profile: ai_profile}} ->
+
+    with {:ok, data} <-
+           PayloadParams.build(payload),
+         {:ok, %{ai_model: ai_model, image_session: image_session, ai_profile: ai_profile}} <-
+           Chats.ChatsBuilder.build_ai_profile(current_user, data) do
       formatted_ai_models = Enum.map(ai_models, &Serializer.ai_model_serialize/1)
       formatted_user_ai_model = Serializer.ai_model_serialize(ai_model)
       formatted_user_ai_profile = Serializer.ai_profile_serialize(ai_profile)
-      overrides = ai_profile |> Map.take([:temperature, :top_p, :presence_penalty, :frequency_penalty])
+      formatted_image_session = Serializer.image_session_serialize(image_session)
+      profile_overrides = ai_profile |> Map.take([:temperature, :top_p, :presence_penalty, :frequency_penalty])
       new_state = socket.assigns.state
-                  |> Map.put("ai_model", formatted_user_ai_model)
-                  |> Map.put("ai_models", formatted_ai_models)
-                  |> Map.put("ai_profile", formatted_user_ai_profile)
-                  |> Map.put("profile_overrides", overrides)
-
+                |> Map.put("ai_model", formatted_user_ai_model)
+                |> Map.put("ai_models", formatted_ai_models)
+                |> Map.put("ai_profile", formatted_user_ai_profile)
+                |> Map.put("profile_overrides", profile_overrides)
+                |> Map.put("image_session", formatted_image_session)
       push(socket, "sync", new_state)
+
       {:reply, :ok, assign(socket, :state, new_state)}
+    else
+      nil -> {:reply, {:error, :chat_not_found}, socket}
+      {:error, reason} -> {:reply, {:error, reason}, socket}
     end
   end
 
@@ -35,33 +43,41 @@ defmodule MessengerWeb.Actions.ChatActions do
   """
   def handle_in("click_open", payload, socket) do
     current_user = socket.assigns.current_user
-    chat_id = Map.get(payload, "chat_id")
-    chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
-    messages = Chats.get_chat_messages(chat.id, current_user.id)
-    serialized_messages = Enum.map(messages, &Serializer.message_serialize(&1, chat))
     ai_models = AiProfiles.get_all_users_ai_models()
 
-    case Chats.ChatsBuilder.build_ai_profile(current_user, payload) do
-      {:ok, %{ai_model: ai_model, ai_profile: ai_profile}} ->
-        formatted_ai_models = Enum.map(ai_models, &Serializer.ai_model_serialize/1)
-        formatted_user_ai_model = Serializer.ai_model_serialize(ai_model)
-        formatted_user_ai_profile = Serializer.ai_profile_serialize(ai_profile)
-        new_state = socket.assigns.state
-                    |> Map.put("ai_model", formatted_user_ai_model)
-                    |> Map.put("ai_models", formatted_ai_models)
-                    |> Map.put("ai_profile", formatted_user_ai_profile)
-                    |> Map.put("active_chat", %{
-          "id" => chat.id,
-          "group_id" => chat.group_id,
-          "profile_overrides" => chat.profile_overrides,
-          "ai_model_id" => to_string(chat.ai_model_id),
-          "is_image_session" => chat.is_image_session || false,
-          "messages" => serialized_messages,
-          "has_more_messages" => length(serialized_messages) >= 15
-        })
+    with {:ok, data} <-
+           PayloadParams.build(payload),
+         {:ok, %{ai_model: ai_model, image_session: image_session, ai_profile: ai_profile}} <-
+           Chats.ChatsBuilder.build_ai_profile(current_user, data) do
+      chat = if data.chat_id, do: Chats.get_chat(current_user.id, data.chat_id), else: nil
+      IO.inspect(chat, label: "CHAT СОДЕРЖИМОЕ")
 
-        push(socket, "sync", new_state)
-        {:reply, :ok, assign(socket, :state, new_state)}
+      messages = Chats.get_chat_messages(chat.id, current_user.id)
+      serialized_messages = Enum.map(messages, &Serializer.message_serialize(&1, chat))
+      formatted_ai_models = Enum.map(ai_models, &Serializer.ai_model_serialize/1)
+      formatted_user_ai_model = Serializer.ai_model_serialize(ai_model)
+      formatted_user_ai_profile = Serializer.ai_profile_serialize(ai_profile)
+      formatted_image_session = Serializer.image_session_serialize(image_session)
+      new_state = socket.assigns.state
+                  |> Map.put("ai_model", formatted_user_ai_model)
+                  |> Map.put("ai_models", formatted_ai_models)
+                  |> Map.put("ai_profile", formatted_user_ai_profile)
+                  |> Map.put("active_chat", %{
+        "id" => chat.id,
+        "group_id" => chat.group_id,
+        "profile_overrides" => chat.profile_overrides,
+        "ai_model_id" => to_string(ai_model.id),
+        "is_image_session" => chat.is_image_session || false,
+        "messages" => serialized_messages,
+        "has_more_messages" => length(serialized_messages) >= 15
+      })
+                  |> Map.put("image_session", formatted_image_session)
+
+      push(socket, "sync", new_state)
+      {:reply, :ok, assign(socket, :state, new_state)}
+    else
+      nil -> {:reply, {:error, :chat_not_found}, socket}
+      {:error, reason} -> {:reply, {:error, reason}, socket}
     end
   end
 
@@ -117,22 +133,19 @@ defmodule MessengerWeb.Actions.ChatActions do
   CREATE_MESSAGE:    Мультифункция создает чат и сообщение в нем от пользователя
   """
   def handle_in("click_submit_message", payload, socket) do
-    IO.inspect(payload, label: "ПАРАМСЫ ПЕРЕДАННЫЕ при click_submit_message")
-
     current_user = socket.assigns.current_user
-    case Chats.MessageSender.create_message(current_user, payload) do
-      {:ok, chat, message} ->
-        # Стейт не обновляем а только отдаем необходимое!
-        {:reply, {:ok, %{
-          "group_id" => chat.group_id, # Что бы при выходе < назад не падать в ебеня
-          "chat_id" => chat.id, # Что бы знать что за чат вообще
-          "message_id" => message.id, # Отдать реальный айдишник сообщения
-          "ai_model_id" => to_string(chat.ai_model_id),
-          "profile_overrides" => chat.profile_overrides
-        }},
-          socket}
-      {:error, _reason} ->
-        {:reply, {:error, %{reason: "failed_to_process_message"}}, socket}
+    with {:ok, data} <- PayloadParams.build(payload),
+         {:ok, %{chat: chat, message: message} } <- Chats.MessageSender.create_message(current_user, data) do
+      {:reply, {:ok, %{
+        "group_id" => chat.group_id, # Что бы при выходе < назад не падать в ебеня
+        "chat_id" => chat.id, # Что бы знать что за чат вообще
+        "message_id" => message.id, # Отдать реальный айдишник сообщения
+        "ai_model_id" => to_string(chat.ai_model_id),
+        "profile_overrides" => chat.profile_overrides
+      }},socket}
+    else
+      nil -> {:reply, {:error, :chat_not_found}, socket}
+      {:error, reason} -> {:reply, {:error, reason}, socket}
     end
   end
 
@@ -141,17 +154,16 @@ defmodule MessengerWeb.Actions.ChatActions do
   """
   def handle_in("click_retry_message", payload, socket) do
     current_user = socket.assigns.current_user
-
-    case Chats.MessageSender.retry_message(current_user, payload) do
-      {:ok, chat, message} ->
-        {:reply, {:ok, %{
-          "group_id" => chat.group_id,
-          "chat_id" => chat.id,
-          "message_id" => message.id,
-          "ai_model_id" => to_string(chat.ai_model_id),
-          "profile_overrides" => chat.profile_overrides
-        }}, socket}
-
+    with {:ok, data} <- PayloadParams.build(payload),
+         {:ok, %{chat: chat, message: message} } <- Chats.MessageSender.retry_message(current_user, data) do
+      {:reply, {:ok, %{
+        "group_id" => chat.group_id,
+        "chat_id" => chat.id,
+        "message_id" => message.id,
+        "ai_model_id" => to_string(chat.ai_model_id),
+        "profile_overrides" => chat.profile_overrides
+      }}, socket}
+    else
       {:error, reason} ->
         Logger.warning("retry_message failed: #{inspect(reason)}")
         {:reply, {:error, %{reason: to_string(reason)}}, socket}
@@ -180,53 +192,27 @@ defmodule MessengerWeb.Actions.ChatActions do
   UPDATE_CHAT:                Мультифункция обновляет чат сраружи
   """
   def handle_in("click_update_chat", payload, socket) do
-
     current_user = socket.assigns.current_user
-    action = Map.get(payload, "action")
-    group_id_raw = Map.get(payload, "group_id")
-    chat_id = Map.get(payload, "chat_id")
-    title = Map.get(payload, "title")
-    chat = Chats.get_chat(current_user.id, chat_id)
 
-    options = case group_id_raw do
-      "All" -> %{}
-      nil -> %{}
-      id -> %{"group_id" => id}
-    end
+    with {:ok, data} <-
+           PayloadParams.build(payload),
+         {:ok, updated_chat} <-
+           execute_action(current_user.id, data) do
+      options = if data.group_id, do: %{"group_id" => data.group_id}, else: %{}
+      updated_chats = Chats.list_user_chats(current_user.id, options: options)
+      formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
+      has_more = length(formatted_chats) >= 15
 
-    group_id = if group_id_raw == "All", do: nil, else: group_id_raw
+      new_state =
+        socket.assigns.state
+        |> Map.put("has_more_chats", has_more)
+        |> Map.put("chats_list", formatted_chats)
 
-    # Перебираем экшены для апдейта
-    # 1) обновить название чата 2) закрепить/открепить 3) удалить чат
-    action_result =
-      case action do
-        "update_title"      ->
-          Chats.update_chat(chat_id, current_user.id, %{"title" => title})
-        "toggle_pin"        ->
-          Chats.update_chat_toggle(current_user.id, chat_id, group_id)
-        "delete"            ->
-          Chats.remove_chat(chat_id, current_user.id)
-        unknown             ->
-          {:error, "unknown_action"}
-      end
-
-    # Единый ответ для всех экшенов
-    case action_result do
-      {:ok, _} ->
-        updated_chats = Chats.list_user_chats(current_user.id, options: options)
-        formatted_chats = Enum.map(updated_chats, &Serializer.chat_serialize/1)
-        has_more = length(formatted_chats) >= 15
-
-        new_state =
-          socket.assigns.state
-          |> Map.put("has_more_chats", has_more)
-          |> Map.put("chats_list", formatted_chats)
-
-        push(socket, "sync", new_state)
-        {:reply, :ok, assign(socket, :state, new_state)}
-
-      {:error, _reason} ->
-        {:reply, {:error, %{reason: "failed_to_execute_action"}}, socket}
+      push(socket, "sync", new_state)
+      {:reply, :ok, assign(socket, :state, new_state)}
+    else
+      nil -> {:reply, {:error, :chat_not_found}, socket}
+      {:error, reason} -> {:reply, {:error, reason}, socket}
     end
   end
 
@@ -236,41 +222,46 @@ defmodule MessengerWeb.Actions.ChatActions do
   """
   def handle_in("click_update_chat_insight", payload, socket) do
     current_user = socket.assigns.current_user
-    chat_id = Map.get(payload, "chat_id")
-    ai_model_id = Map.get(payload, "ai_model_id")
-    payload_overrides = Map.get(payload, "profile_overrides")
+    with {:ok, data} <-
+           PayloadParams.build(payload),
+         {:ok, result} <-
+           Chats.update_chat(data.chat_id, current_user.id, %{
+             ai_model_id: data.ai_model_id,
+             profile_overrides: data.profile_overrides,
+             image_ai_model_id: data.image_ai_model_id
+           }) do
+      updated_chat = result.chat
+      updated_image_session = Map.get(result, :image_session)
 
-    chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
+      messages = Chats.get_chat_messages(updated_chat.id, current_user.id)
+      serialized_messages = Enum.map(messages, &Serializer.message_serialize(&1, updated_chat))
+      serialized_image_session =
+        if updated_chat.is_image_session do
+          Serializer.image_session_serialize(updated_image_session)
+        else
+          %{}
+        end
+      new_state = socket.assigns.state
+                  |> Map.put("active_chat", %{
+        "id" => updated_chat.id,
+        "title" => updated_chat.title,
+        "group_id" => updated_chat.group_id,
+        "ai_model_id" => to_string(updated_chat.ai_model_id),
+        "profile_overrides" => updated_chat.profile_overrides,
+        "messages" => serialized_messages,
+        "has_more_messages" => length(serialized_messages) >= 15,
+        "is_image_session" => updated_chat.is_image_session || false
+      })
+                  |> Map.put("image_session", serialized_image_session)
 
-    action_result = if chat do
-      Chats.update_chat(chat_id, current_user.id, %{ai_model_id: ai_model_id, profile_overrides: payload_overrides || %{}})
+      push(socket, "sync", new_state)
+      # Сохраняем обновленное состояние в процессе сокета
+      {:reply, :ok, assign(socket, :state, new_state)}
     else
-      {:ok, label: "returned_nil"}  # или что-то другое
-    end
-
-    case action_result do
-        {:ok, chat} ->
-          messages = Chats.get_chat_messages(chat.id, current_user.id)
-          serialized_messages = Enum.map(messages, &Serializer.message_serialize(&1, chat))
-          new_state = socket.assigns.state
-                      |> Map.put("active_chat", %{
-            "id" => chat.id,
-            "title" => chat.title,
-            "group_id" => chat.group_id,
-            "ai_model_id" => to_string(chat.ai_model_id),
-            "profile_overrides" => chat.profile_overrides,
-            "messages" => serialized_messages,
-            "has_more_messages" => length(serialized_messages) >= 15
-          })
-
-          push(socket, "sync", new_state)
-          # Сохраняем обновленное состояние в процессе сокета
-          {:reply, :ok, assign(socket, :state, new_state)}
-      {:error, _changeset} ->
-        {:reply, {:error, %{reason: "failed_to_update_chat"}}, socket}
+      nil -> {:reply, {:error, :chat_not_found}, socket}
+      {:error, reason} -> {:reply, {:error, reason}, socket}
     end
   end
-
 
   @doc """
   Это функция пагинации, при скролинге и долистывании до таргета, с фронта прилетает запрос, после которого мы отдаем
@@ -282,9 +273,8 @@ defmodule MessengerWeb.Actions.ChatActions do
     group_id = Map.get(payload, "group_id")
 
     options = case group_id do
-      "All" -> %{}
       nil -> %{}
-      id -> %{"group_id" => id}
+      id  -> %{"group_id" => id}
     end
 
     case List.last(current_chats_list) do
@@ -403,7 +393,6 @@ defmodule MessengerWeb.Actions.ChatActions do
   """
   def handle_in("click_update_chat_group", %{"chat_id" => chat_id, "group_id" => group_id, "action" => "add"}, socket) do
     current_user = socket.assigns.current_user
-
     case Chats.add_chat_to_group(chat_id, group_id, current_user.id) do
       {:ok, _group} ->
         updated_chats = Chats.list_user_chats(current_user.id, options: %{"group_id" => group_id})
@@ -429,9 +418,8 @@ defmodule MessengerWeb.Actions.ChatActions do
     current_user = socket.assigns.current_user
 
     options = case group_id do
-      "All" -> %{}
       nil -> %{}
-      id -> %{"group_id" => id}
+      id  -> %{"group_id" => id}
     end
 
     case Chats.remove_chat_from_group(chat_id, current_user.id) do
@@ -475,5 +463,24 @@ defmodule MessengerWeb.Actions.ChatActions do
       {:error, _changeset} ->
         {:reply, {:error, %{reason: "failed_to_remove_group"}}, socket}
     end
+  end
+
+  #==============================
+  #------UPDATE CHAT ACTIONS-----
+  #==============================
+  defp execute_action(user_id, %PayloadParams{action: "update_title", chat_id: chat_id, title: title}) do
+    Chats.update_chat(chat_id, user_id, %{"title" => title})
+  end
+
+  defp execute_action(user_id, %PayloadParams{action: "toggle_pin", chat_id: chat_id, group_id: group_id}) do
+    Chats.update_chat_toggle(user_id, chat_id, group_id)
+  end
+
+  defp execute_action(user_id, %PayloadParams{action: "delete", chat_id: chat_id}) do
+    Chats.remove_chat(chat_id, user_id)
+  end
+
+  defp execute_action(_user_id, _data) do
+    {:error, :unknown_action}
   end
 end

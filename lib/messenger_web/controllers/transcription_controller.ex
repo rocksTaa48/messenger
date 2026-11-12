@@ -1,16 +1,12 @@
 defmodule MessengerWeb.TranscriptionController do
-  alias Messenger.Chats
+  alias Messenger.Chats.PayloadParams
   alias Messenger.Ai.MessageTranscript
   alias Messenger.AiProfiles
   use MessengerWeb, :controller
     require Logger
 
   def upload(conn, %{"audio" => %Plug.Upload{} = upload} = params) do
-    IO.inspect(params, label: "ПАРАМСЫ ПЕРЕДАННЫЕ В ВИСПЕР")
     current_user = conn.assigns.current_user
-    temp_id = params["temp_id"]
-    chat_id = params["chat_id"]
-    ai_model_id = params["ai_model_id"]
     is_image_session =
       case Map.get(params, "is_image_session") do
         "true" -> true
@@ -34,23 +30,29 @@ defmodule MessengerWeb.TranscriptionController do
       _ -> %{}
     end
 
-    case MessageTranscript.start_generation(current_user, %{
-      "chat_id" => chat_id,
-      "ai_model_id" => ai_model_id,
-      "profile_overrides" => profile_overrides || %{},
-      "is_image_session" => is_image_session || false,
-      "ai_transcript_model" => ai_transcript_model,
-      "temp_id" => temp_id,
-      "base64" => base64,
-      "format" => format
-    }) do
-      {:ok, pid} ->
+    precompleted_params = %{
+      "temp_id"             => params["temp_id"],
+      "chat_id"             => params["chat_id"],
+      "ai_model_id"         => params["ai_model_id"],
+      "is_audio"            => true,
+      "is_image_session"    => is_image_session,
+      "base64"              => base64,
+      "format"              => format,
+      "ai_transcript_model_id" => ai_transcript_model.id,
+      "profile_overrides"   => profile_overrides
+    }
+
+    with {:ok, data} <- PayloadParams.build(precompleted_params),
+         {:ok, pid} <- MessageTranscript.start_generation(current_user, data) do
         Logger.info("Transcription task started: #{inspect(pid)}")
+        json(conn, %{status: "ok", text: "Endpoint done"})
+    else
+      {:error, %Ecto.Changeset{} = cs} ->
+        Logger.error("Invalid params: #{inspect(cs.errors)}")
+        conn |> put_status(422) |> json(%{status: "error", errors: cs.errors})
       {:error, reason} ->
-        Logger.error("Failed to start transcription task: #{inspect(reason)}")
+        Logger.error("Failed to start transcription: #{inspect(reason)}")
+        conn |> put_status(500) |> json(%{status: "error"})
     end
-
-    json(conn, %{status: "ok", text: "Endpoint done"})
   end
-
 end

@@ -4,80 +4,65 @@ defmodule Messenger.Chats.MessageSender do
   alias Messenger.Serializer
   alias Messenger.Ai.{MessageStreaming, CreateSummaryForChat, CreateTitleForChat, CreateOrchestratorMessage}
 
-  def create_message(current_user, payload) do
-    is_audio = Map.get(payload, "is_audio")
-    content = Map.get(payload, "text")
-    temp_id = Map.get(payload, "temp_id")
-    chat_id = Map.get(payload, "chat_id")
-    chat = if chat_id, do: Chats.get_chat(current_user.id, chat_id), else: nil
-    chat_is_image_session = chat && Map.get(chat, :is_image_session, false)
-
-    is_image_session = Map.get(payload, "is_image_session", false)
-
-    case Chats.ChatsBuilder.build_ai_profile(current_user, payload) do
+  def create_message(current_user, data) do
+    case Chats.ChatsBuilder.build_ai_profile(current_user, data) do
       nil ->
         {:error, "build profile error"}
-      {:ok, %{ai_model: ai_model, image_ai_model: image_ai_model, ai_profile: ai_profile}} ->
-        unless is_image_session == true or chat_is_image_session == true do
+      {:ok, %{ai_model: ai_model, image_session: image_session, ai_profile: ai_profile}} ->
+        unless handle_session(image_session) do
           send_run(%{
             "user_id" => current_user.id,
             "user_status" => current_user.status,
-            "chat_id" => chat_id,
-            "temp_id" => temp_id,
-            "content" => content,
-            "is_audio" => is_audio,
+            "chat_id" => data.chat_id,
+            "temp_id" => data.temp_id,
+            "content" => data.text,
+            "is_audio" => data.is_audio,
             "ai_profile" => ai_profile,
             "ai_model" => ai_model
           })
         else
           send_orchestrator_run(current_user, %{
-            "chat_id" => chat_id,
-            "temp_id" => temp_id,
-            "content" => content,
-            "is_audio" => is_audio,
+            "chat_id" => data.chat_id,
+            "temp_id" => data.temp_id,
+            "content" => data.text,
+            "is_audio" => data.is_audio,
             "ai_profile" => ai_profile,
             "ai_model" => ai_model,
-            "image_ai_model" => image_ai_model
+            "image_session" => image_session
           })
         end
     end
   end
 
-  def retry_message(current_user, payload) do
-    chat_id = Map.fetch!(payload, "chat_id")
-    message_id = Map.fetch!(payload, "message_id")
-    temp_id = Map.get(payload, "temp_id")
-
-    case Chats.get_chat(current_user.id, chat_id) do
+  def retry_message(current_user, data) do
+    case Chats.get_chat(current_user.id, data.chat_id) do
       nil ->
         {:error, :chat_not_found}
 
       chat ->
-        case Chats.get_message(message_id) do
+        case Chats.get_message(data.message_id) do
           nil ->
             {:error, :message_not_found}
 
           message ->
-            case Chats.ChatsBuilder.build_ai_profile(current_user, payload) do
+            case Chats.ChatsBuilder.build_ai_profile(current_user, data) do
               nil ->
                 {:error, :build_profile_failed}
 
-              {:ok, %{ai_model: ai_model, image_ai_model: image_ai_model, ai_profile: ai_profile}} ->
+              {:ok, %{ai_model: ai_model,image_session: image_session, ai_profile: ai_profile}} ->
                 serialized_ai_profile = Serializer.profile_for_api_serialize(ai_profile)
-                trigger_stream(current_user, chat, message, ai_model, serialized_ai_profile, temp_id)
+                trigger_stream(current_user, chat, message, ai_model, serialized_ai_profile, data.temp_id)
                 {:ok, chat, message}
             end
         end
     end
   end
 
-
   defp send_run(attrs) do
     ai_model = Map.fetch!(attrs, "ai_model")
     ai_profile = Map.fetch!(attrs, "ai_profile")
     user_id = Map.fetch!(attrs, "user_id")
     user_status = Map.fetch!(attrs, "user_status")
-
     chat_id = Map.get(attrs, "chat_id")
     content = Map.get(attrs, "content")
     is_audio = Map.get(attrs, "is_audio")
@@ -128,14 +113,14 @@ defmodule Messenger.Chats.MessageSender do
         })
         # Щупаем суммаризатор на его необходимость
         start_summary(user_id, user_status, ai_model, chat.id, chat.summarized_up_to_message_id)
-        {:ok, chat, message}
+        {:ok, %{chat: chat, message: message}}
     end
   end
 
   defp send_orchestrator_run(current_user, attrs) do
     ai_model = Map.fetch!(attrs, "ai_model")
     ai_profile = Map.fetch!(attrs, "ai_profile")
-    image_ai_model = Map.fetch!(attrs, "image_ai_model")
+    image_ai_model_id = Map.fetch!(attrs, "image_session").ai_model_id
     chat_id = Map.get(attrs, "chat_id")
     content = Map.get(attrs, "content")
     is_audio = Map.get(attrs, "is_audio")
@@ -152,7 +137,7 @@ defmodule Messenger.Chats.MessageSender do
       "overrides" => overrides,
       "user_id" => current_user.id,
       "is_audio" => is_audio,
-      "image_ai_model_id" => image_ai_model.id,
+      "image_ai_model_id" => image_ai_model_id,
       "is_image_session" => true
     }
 
@@ -174,7 +159,7 @@ defmodule Messenger.Chats.MessageSender do
 
         # Собираем контекст
         context = Chats.get_ai_context(chat.id)
-
+        image_ai_model = AiProfiles.get_ai_model(image_ai_model_id)
         CreateOrchestratorMessage.start_generation(current_user, %{
           "chat_id" => chat.id,
           "ai_model" => ai_model,
@@ -185,7 +170,7 @@ defmodule Messenger.Chats.MessageSender do
           "temp_id" => temp_id,
           "request_id" => message.id
         })
-        {:ok, chat, message}
+        {:ok, %{chat: chat, message: message}}
     end
   end
 
@@ -235,4 +220,7 @@ defmodule Messenger.Chats.MessageSender do
       end
     end
   end
+
+  defp handle_session(session) when session in [%{}, nil, false], do: false
+  defp handle_session(%{} = session), do: true
 end

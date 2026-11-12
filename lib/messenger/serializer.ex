@@ -90,6 +90,17 @@ defmodule Messenger.Serializer do
     }
   end
 
+  def image_session_serialize(image_session) when is_map(image_session) and map_size(image_session) > 0 do
+    %{
+      "id" => to_string(Map.get(image_session, :id)),
+      "ai_model_id" => to_string(Map.get(image_session, :ai_model_id)),
+      "chat_id" => Map.get(image_session, :chat_id),
+      "overrides" => Map.get(image_session, :overrides) || %{},
+    }
+  end
+
+  def image_session_serialize(_), do: %{}
+
   # Сериализуем Чат
   def chat_serialize(chat) do
     %{

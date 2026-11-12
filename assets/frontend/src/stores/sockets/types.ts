@@ -6,7 +6,7 @@ export interface NavigationNode {
     screen: 'chats' | 'settings' | 'inside_chat' | 'new_chat';
     params?: {
         chat_id?: string;
-        group_id?: string;
+        group_id?: number | null;
         [key: string]: any;
     };
 }
@@ -88,7 +88,20 @@ export interface AppState {
         };
     }>;
 
-    groups: Array<{ id: string; title: string }>;
+    groups: Array<{
+        id: number | null;
+        title: string
+    }>;
+
+    image_session: {
+        id: string;
+        ai_model_id: string;
+        chat_id: string;
+        overrides?: {
+            aspect_ratio?: string;
+            resolution?: string;
+        };
+    }
 
     active_chat: {
         id: string;
@@ -103,6 +116,7 @@ export interface AppState {
             presence_penalty?: number | string;
             frequency_penalty?: number | string;
         };
+
         messages: Array<{
             id: number | string;
             content: string;
@@ -157,6 +171,7 @@ export const initialValue: AppState = {
     chats_list: [],
     groups: [],
     active_chat: null,
+    image_session: null,
     has_more_chats: false,
     has_more_messages: false,
     settings: { theme: 'dark', lang: 'ru' },

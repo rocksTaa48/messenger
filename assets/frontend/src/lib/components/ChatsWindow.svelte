@@ -19,7 +19,7 @@
         console.log('Menu clicked');
     }
 
-    $: activeCategoryId = $appState.nav_context.params?.group_id || 'All'
+    $: activeCategoryId = $appState.nav_context.params?.group_id || null
 
 
     let isLoadingMore = false;
@@ -104,7 +104,7 @@
 
         contextMenuChatTitle = chat.name || chat.title || 'Без названия';
 
-        const isOnSpecificFolder = activeCategoryId && activeCategoryId !== 'All';
+        const isOnSpecificFolder = activeCategoryId && activeCategoryId !== null;
 
 
         contextMenuActions = [
@@ -164,7 +164,7 @@
                     renameModalTitle = 'Переименовать чат';
                     renameEventType = 'chat:click_update_chat';
                     renameEventCode = "update_title";
-                    renameExtraParams = { group_id: activeCategoryId?.toString() || "All" };
+                    renameExtraParams = { group_id: activeCategoryId || null };
                     isRenameModalOpen = true;
                 }
             },
@@ -176,7 +176,7 @@
                 onClick: () => {
                     isContextMenuOpen = false;
                     pendingDeleteAction = () => {
-                        const payload = activeCategoryId !== 'All'
+                        const payload = activeCategoryId !== null
                             ? { chat_id: chat.id, group_id: activeCategoryId, action: "delete" }
                             : { chat_id: chat.id, action: "delete"};
                         appState.send("chat:click_update_chat", payload);
@@ -225,7 +225,7 @@
                     isGroupContextMenuOpen = false;
 
                     // Настраиваем и открываем модалку переименования
-                    renameItemId = group.id.toString();
+                    renameItemId = group.id;
                     renameCurrentTitle = group.title;
                     renameEventKey = "group_id";
                     renameModalTitle = 'Переименовать папку';
@@ -266,12 +266,12 @@
         // Обычный быстрый клик — навигация
         appState.goTo({
             screen: 'chats',
-            params: { group_id: group.id.toString() }
+            params: { group_id: group.id }
         });
     }
 
     // Реактивно скроллим активную вкладку при любом изменении списка групп
-    $: if ($appState.groups && activeCategoryId !== 'All') {
+    $: if ($appState.groups && activeCategoryId !== null) {
         // Небольшая задержка, чтобы DOM успел перерисоваться
         setTimeout(() => {
             const activeButton = document.querySelector(`[data-group-id="${activeCategoryId}"]`);
@@ -352,7 +352,7 @@
                         isSearchOpen = !isSearchOpen;
                         if (!isSearchOpen) {
                             searchQuery = "";
-                            if (activeCategoryId === 'All') {
+                            if (activeCategoryId === null) {
                                 appState.goTo({ screen: 'chats' });
                             } else {
                                 appState.goTo({ screen: 'chats', params: { group_id: activeCategoryId } });
@@ -380,7 +380,7 @@
                     <!-- КНОПКА ALL -->
                     <button
                             class="h-8 px-4 rounded-full text-[13px] font-medium transition-all duration-200 flex items-center justify-center select-none active:scale-95 shrink-0
-                        {activeCategoryId === 'All'
+                        {activeCategoryId === null
                             ? 'bg-white/10 text-white backdrop-blur-2xl'
                             : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}"
                             on:click={() => appState.goTo({ screen: 'chats' })}
@@ -391,7 +391,7 @@
                     <!-- ДИНАМИЧЕСКИЕ ГРУППЫ -->
                     {#if $appState && $appState.groups}
                         {#each $appState.groups as group (group.id)}
-                            {@const isActive = activeCategoryId.toString() === group.id.toString()}
+                            {@const isActive = activeCategoryId === group.id}
 
                             <button
                                     data-group-id={group.id}

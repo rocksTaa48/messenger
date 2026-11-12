@@ -1,12 +1,13 @@
 <script lang="ts">
     import { fly, fade } from 'svelte/transition';
-    import { X, Check, Sparkles, ChevronDown, ChevronUp, Settings2, ChevronRight } from 'lucide-svelte';
+    import { X, Sparkles, Settings2, ChevronRight } from 'lucide-svelte';
     import { createEventDispatcher } from 'svelte';
     import WebApp from "@twa-dev/sdk";
     import { appState } from '../../stores/socketStore';
 
     import ParametersModal from './ParametersModal.svelte';
     import ConfirmModal from './ConfirmModal.svelte';
+    import AiModelSelectorModal from './AiModelSelectorModal.svelte'; // <-- ИМПОРТ НОВОЙ МОДАЛКИ
 
     export let isOpen = false;
     export let currentAiModelId: string | null = null;
@@ -31,10 +32,7 @@
     }>();
 
     let selectedAiModelId: string | null = null;
-    let isDropdownOpen = false;
-
     let selectedImageAiModelId: string | null = null;
-    let isImageDropdownOpen = false;
 
     let temperature = 0.7;
     let topP = 1.0;
@@ -45,6 +43,10 @@
     let isWarningOpen = false;
     let pendingParams: { temperature: number; topP: number; frequencyPenalty: number; presencePenalty: number } | null = null;
 
+    // Состояние для модалки выбора модели
+    let isModelSelectorOpen = false;
+    let selectorTarget: 'llm' | 'image' = 'llm';
+
     $: ai_models = $appState?.ai_models || [];
     $: llmAiModels = ai_models.filter(m => m.type === 'llm');
     $: imageAiModels = ai_models.filter(m => m.type === 'image');
@@ -53,6 +55,11 @@
     $: selectedModel = ai_models.find(m => m.id === selectedAiModelId);
     $: selectedImageAiModel = imageAiModels.find(m => m.id === selectedImageAiModelId);
 
+    // Динаические данные для модалки выбора
+    $: selectorModels = selectorTarget === 'llm' ? llmAiModels : imageAiModels;
+    $: selectorTitle = selectorTarget === 'llm' ? 'Модель оркестратора' : 'Модель генерации';
+    $: selectorSelectedId = selectorTarget === 'llm' ? selectedAiModelId : selectedImageAiModelId;
+
     $: if (isOpen) {
         selectedAiModelId = currentAiModelId;
         selectedImageAiModelId = currentImageAiModelId;
@@ -60,56 +67,30 @@
         topP = currentTopP ?? 1.0;
         frequencyPenalty = currentFrequencyPenalty ?? 0.0;
         presencePenalty = currentPresencePenalty ?? 0.0;
-        isDropdownOpen = false;
-        isImageDropdownOpen = false;
         isParamsOpen = false;
         isWarningOpen = false;
         pendingParams = null;
-    }
-
-    function isModelAccessible(modelTier: string): boolean {
-        const tierOrder: Record<string, number> = { 'free': 0, 'premium': 1, 'ultimate': 2 };
-        const userLevel = tierOrder[userStatus] || 0;
-        const modelLevel = tierOrder[modelTier] || 0;
-        return userLevel >= modelLevel;
+        isModelSelectorOpen = false;
     }
 
     function close() {
-        isDropdownOpen = false;
-        isImageDropdownOpen = false;
         dispatch('close');
     }
 
-    function handleAiModelClick(modelId: string, isAccessible: boolean) {
-        if (!isAccessible) {
-            if (WebApp.HapticFeedback) WebApp.HapticFeedback.notificationOccurred('error');
-            return;
-        }
-        selectedAiModelId = modelId;
-        isDropdownOpen = false;
-        if (WebApp.HapticFeedback) WebApp.HapticFeedback.selectionChanged();
-    }
-
-    function handleImageAiModelClick(modelId: string, isAccessible: boolean) {
-        if (!isAccessible) {
-            if (WebApp.HapticFeedback) WebApp.HapticFeedback.notificationOccurred('error');
-            return;
-        }
-        selectedImageAiModelId = modelId;
-        isImageDropdownOpen = false;
-        if (WebApp.HapticFeedback) WebApp.HapticFeedback.selectionChanged();
-    }
-
-    function toggleDropdown() {
-        isDropdownOpen = !isDropdownOpen;
-        isImageDropdownOpen = false;
+    function openModelSelector(target: 'llm' | 'image') {
+        selectorTarget = target;
+        isModelSelectorOpen = true;
         if (WebApp.HapticFeedback) WebApp.HapticFeedback.impactOccurred('light');
     }
 
-    function toggleImageDropdown() {
-        isImageDropdownOpen = !isImageDropdownOpen;
-        isDropdownOpen = false;
-        if (WebApp.HapticFeedback) WebApp.HapticFeedback.impactOccurred('light');
+    function handleModelSelect(event: CustomEvent<string>) {
+        const modelId = event.detail;
+        if (selectorTarget === 'llm') {
+            selectedAiModelId = modelId;
+        } else {
+            selectedImageAiModelId = modelId;
+        }
+        isModelSelectorOpen = false;
     }
 
     function openParamsModal() {
@@ -143,7 +124,6 @@
     function handleMainApply() {
         if (WebApp.HapticFeedback) WebApp.HapticFeedback.impactOccurred('medium');
 
-        // Кнопка активна, если выбрана LLM модель И (если это image сессия) выбрана Image модель
         const isValid = selectedAiModelId && (!isImageSession || selectedImageAiModelId);
 
         if (isValid) {
@@ -164,7 +144,7 @@
     <div class="fixed inset-0 z-[100] overflow-hidden pointer-events-auto">
         <div on:click={close} class="absolute inset-0 bg-black/60 backdrop-blur-sm" transition:fade={{ duration: 150 }}></div>
 
-        <div class="absolute bottom-0 left-0 right-0 bg-[#1c1c1e] border-t border-white/10 rounded-t-[32px] shadow-2xl flex flex-col transition-all duration-300 ease-out {(isDropdownOpen || isImageDropdownOpen) ? 'h-[90dvh]' : 'max-h-[85dvh]'}"
+        <div class="absolute bottom-0 left-0 right-0 bg-[#1c1c1e] border-t border-white/10 rounded-t-[32px] shadow-2xl flex flex-col transition-all duration-300 ease-out max-h-[85dvh]"
              transition:fly={{ y: '100%', duration: 300 }}
         >
             <div class="w-full flex justify-center pt-3 pb-1 flex-shrink-0">
@@ -183,96 +163,47 @@
 
             <div class="flex-1 overflow-y-auto px-6 pb-6 space-y-6 scrollbar-none">
 
-                <!-- 1. Модель оркестратора (ВСЕГДА видна) -->
+                <!-- 1. Модель оркестратора (ВСЕГДА видна, открывает модалку) -->
                 <div class="space-y-2">
                     <label class="text-sm font-medium text-gray-400 ml-1">Модель оркестратора</label>
-                    <div class="relative">
-                        <button on:click={toggleDropdown} class="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all active:scale-[0.98]">
-                            <div class="flex flex-col items-start min-w-0 flex-1">
-                                <span class="text-base font-semibold text-white truncate w-full">
-                                    {selectedModel ? (selectedModel.display_name || selectedModel.model_name) : 'Выберите модель'}
+                    <button
+                            on:click={() => openModelSelector('llm')}
+                            class="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all active:scale-[0.98]"
+                    >
+                        <div class="flex flex-col items-start min-w-0 flex-1">
+                            <span class="text-base font-semibold text-white truncate w-full">
+                                {selectedModel ? (selectedModel.display_name || selectedModel.model_name) : 'Выберите модель'}
+                            </span>
+                            {#if selectedModel}
+                                <span class="text-xs text-gray-400 truncate mt-0.5 w-full">
+                                    {selectedModel.display_description || 'Стандартная конфигурация'}
                                 </span>
-                                {#if selectedModel}
-                                    <span class="text-xs text-gray-400 truncate mt-0.5 w-full">
-                                        {selectedModel.display_description || 'Стандартная конфигурация'}
-                                    </span>
-                                {/if}
-                            </div>
-                            {#if isDropdownOpen}<ChevronUp size={20} class="text-gray-400 ml-3 shrink-0" />{:else}<ChevronDown size={20} class="text-gray-400 ml-3 shrink-0" />{/if}
-                        </button>
-
-                        {#if isDropdownOpen}
-                            <div class="absolute top-full left-0 right-0 mt-2 bg-[#121212] border border-white/10 rounded-2xl max-h-60 overflow-y-auto z-20 shadow-xl scrollbar-none" transition:fly={{ y: -10, duration: 200 }}>
-                                {#each llmAiModels as model}
-                                    {@const isAccessible = isModelAccessible(model.tier)}
-                                    {@const isSelected = selectedAiModelId === model.id}
-                                    <button on:click={() => handleAiModelClick(model.id, isAccessible)} disabled={!isAccessible} class="w-full text-left p-3.5 flex items-center justify-between transition-colors border-b border-white/5 last:border-0 overflow-hidden {isSelected ? 'bg-[#2481cc]/10' : 'hover:bg-white/5'} {!isAccessible ? 'opacity-60' : ''}">
-                                        <div class="flex flex-col min-w-0 flex-1 pr-3">
-                                            <span class="text-sm font-semibold text-white truncate block w-full">{model.display_name || model.model_name || 'Без имени'}</span>
-                                            <span class="text-xs text-gray-400 truncate mt-0.5 block w-full">{model.display_description || 'Стандартная конфигурация'}</span>
-                                        </div>
-                                        <div class="flex items-center gap-2 shrink-0">
-                                            {#if !isAccessible}
-                                                <span class="text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-full border border-amber-400/20 whitespace-nowrap">Upgrade</span>
-                                            {:else if isSelected}
-                                                <div class="w-6 h-6 rounded-full bg-[#2481cc] flex items-center justify-center shrink-0">
-                                                    <Check size={14} class="text-white" strokeWidth={3} />
-                                                </div>
-                                            {/if}
-                                        </div>
-                                    </button>
-                                {/each}
-                            </div>
-                        {/if}
-                    </div>
+                            {/if}
+                        </div>
+                        <ChevronRight size={20} class="text-gray-500 shrink-0" />
+                    </button>
                 </div>
 
-                <!-- 2. Модель генерации (ТОЛЬКО если isImageSession) -->
+                <!-- 2. Модель генерации (ТОЛЬКО если isImageSession, открывает модалку) -->
                 {#if isImageSession}
                     <div class="space-y-2">
                         <label class="text-sm font-medium text-gray-400 ml-1">Модель генерации</label>
-                        <div class="relative">
-                            <button on:click={toggleImageDropdown} class="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all active:scale-[0.98]">
-                                <div class="flex flex-col items-start min-w-0 flex-1">
-                                    <span class="text-base font-semibold text-white truncate w-full">
-                                        {selectedImageAiModel ? (selectedImageAiModel.display_name || selectedImageAiModel.model_name) : 'Выберите модель'}
+                        <button
+                                on:click={() => openModelSelector('image')}
+                                class="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all active:scale-[0.98]"
+                        >
+                            <div class="flex flex-col items-start min-w-0 flex-1">
+                                <span class="text-base font-semibold text-white truncate w-full">
+                                    {selectedImageAiModel ? (selectedImageAiModel.display_name || selectedImageAiModel.model_name) : 'Выберите модель'}
+                                </span>
+                                {#if selectedImageAiModel}
+                                    <span class="text-xs text-gray-400 truncate mt-0.5 w-full">
+                                        {selectedImageAiModel.display_description || 'Стандартная конфигурация'}
                                     </span>
-                                    {#if selectedImageAiModel}
-                                        <span class="text-xs text-gray-400 truncate mt-0.5 w-full">
-                                            {selectedImageAiModel.display_description || 'Стандартная конфигурация'}
-                                        </span>
-                                    {/if}
-                                </div>
-                                {#if isImageDropdownOpen}<ChevronUp size={20} class="text-gray-400 ml-3 shrink-0" />{:else}<ChevronDown size={20} class="text-gray-400 ml-3 shrink-0" />{/if}
-                            </button>
-
-                            {#if isImageDropdownOpen}
-                                <div class="absolute top-full left-0 right-0 mt-2 bg-[#121212] border border-white/10 rounded-2xl max-h-60 overflow-y-auto z-20 shadow-xl scrollbar-none" transition:fly={{ y: -10, duration: 200 }}>
-                                    {#each imageAiModels as model}
-                                        {@const isAccessible = isModelAccessible(model.tier)}
-                                        {@const isSelected = selectedImageAiModelId === model.id}
-                                        <button on:click={() => handleImageAiModelClick(model.id, isAccessible)} disabled={!isAccessible} class="w-full text-left p-3.5 flex items-center justify-between transition-colors border-b border-white/5 last:border-0 overflow-hidden {isSelected ? 'bg-[#2481cc]/10' : 'hover:bg-white/5'} {!isAccessible ? 'opacity-60' : ''}">
-                                            <div class="flex flex-col min-w-0 flex-1 pr-3">
-                                                <span class="text-sm font-semibold text-white truncate block w-full">{model.display_name || model.model_name || 'Без имени'}</span>
-                                                <span class="text-xs text-gray-400 truncate mt-0.5 block w-full">{model.display_description || 'Стандартная конфигурация'}</span>
-                                            </div>
-                                            <div class="flex items-center gap-2 shrink-0">
-                                                {#if !isAccessible}
-                                                    <span class="text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-full border border-amber-400/20 whitespace-nowrap">Upgrade</span>
-                                                {:else if isSelected}
-                                                    <div class="w-6 h-6 rounded-full bg-[#2481cc] flex items-center justify-center shrink-0">
-                                                        <Check size={14} class="text-white" strokeWidth={3} />
-                                                    </div>
-                                                {/if}
-                                            </div>
-                                        </button>
-                                    {/each}
-                                    {#if imageAiModels.length === 0}
-                                        <div class="p-4 text-center text-sm text-gray-500">Нет доступных моделей</div>
-                                    {/if}
-                                </div>
-                            {/if}
-                        </div>
+                                {/if}
+                            </div>
+                            <ChevronRight size={20} class="text-gray-500 shrink-0" />
+                        </button>
                     </div>
                 {/if}
 
@@ -312,6 +243,7 @@
     </div>
 {/if}
 
+<!-- Вложенные модалки -->
 <ParametersModal
         isOpen={isParamsOpen}
         initialTemperature={temperature}
@@ -331,6 +263,16 @@
         isDanger={true}
         on:confirm={handleWarningConfirm}
         on:cancel={handleWarningCancel}
+/>
+
+<AiModelSelectorModal
+        isOpen={isModelSelectorOpen}
+        title={selectorTitle}
+        models={selectorModels}
+        selectedModelId={selectorSelectedId}
+        userStatus={userStatus}
+        on:select={handleModelSelect}
+        on:close={() => isModelSelectorOpen = false}
 />
 
 <style>

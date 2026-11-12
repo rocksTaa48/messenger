@@ -10,7 +10,17 @@ defmodule Messenger.Chats do
   Функция достает все сообщения из текущего чата пользователя
   """
   def get_chat(user_id, chat_id) do
-    Repo.get_by!(Chat, id: chat_id, user_id: user_id)
+    case Repo.get_by(Chat, id: chat_id, user_id: user_id) do
+      nil ->
+        {:error, :not_found}
+      chat ->
+        if chat.is_image_session do
+          chat
+          |> Repo.preload(:image_session)
+        else
+          chat
+        end
+    end
   end
 
   @doc """
@@ -83,7 +93,7 @@ defmodule Messenger.Chats do
 
   # Получение закрепленных чатов
   defp get_pinned_chats(user_id, group_id) do
-    # Сортируем по p.inserted_at (порядок закрепления), но если нужно по алфавиту или обновлению — меняйте тут
+    # Сортируем по p.inserted_at (порядок закрепления), но если нужно по алфавиту или обновлению МЕНЯТЬ ЗДЕСЬ
     query = from p in PinnedChat,
                  where: p.user_id == ^user_id,
                  join: c in assoc(p, :chat),
@@ -155,8 +165,6 @@ defmodule Messenger.Chats do
     end
   end
 
-
-
   def get_last_message(chat_id) do
     Message
       |> where(chat_id: ^chat_id)
@@ -216,16 +224,50 @@ defmodule Messenger.Chats do
   Обновляем чат
   """
   def update_chat(chat_id, user_id, attrs) do
+    IO.inspect(attrs, label: "chat update ATTRS !__!_!_!_!_!!_!_!__!!_!_!__!_!!!!_!_!_!_!")
     case Repo.get_by(Chat, id: chat_id, user_id: user_id) do
-      nil -> # Если чат не обнаружен
+      nil ->
         {:error, :not_found}
+
       chat ->
-        chat
-        |> Chat.changeset(attrs)
-        |> Repo.update()
+        multi =
+          Multi.new()
+          |> Multi.update(:chat, Chat.changeset(chat, attrs))
+        multi =
+          if chat.is_image_session do
+            Multi.run(multi, :image_session, fn repo, %{chat: updated_chat} ->
+              update_image_session(repo, updated_chat, attrs)
+            end)
+          else
+            multi
+          end
+        Repo.transaction(multi)
     end
   end
 
+  defp update_image_session(repo, %{is_image_session: true, id: chat_id}, attrs) do
+    image_model_id = attrs[:image_ai_model_id] || attrs["image_ai_model_id"]
+
+    case {repo.get_by(ImageSession, chat_id: chat_id), image_model_id} do
+      {nil, _} ->
+        {:error, :image_session_not_found}
+
+      {session, nil} ->
+        # Если модель картинок не передавали, просто возвращаем сессию без изменений
+        {:ok, session}
+
+      {session, model_id} ->
+        session
+        |> ImageSession.changeset(%{ai_model_id: model_id})
+        |> repo.update()
+    end
+  end
+
+  defp update_image_session(_repo, _chat, _attrs), do: {:ok, nil}
+
+  @doc"""
+  Обновляем чат TITLE
+  """
   def update_chat_title_with_ai(%{
     user_id: user_id,
     chat_id: chat_id,
@@ -276,8 +318,10 @@ defmodule Messenger.Chats do
 
   def remove_chat(chat_id, user_id) do
     case Repo.get_by(Chat, id: chat_id, user_id: user_id) do
-      nil -> {:error, :not_found}
-      chat -> Repo.delete(chat)
+      nil ->
+        {:error, :not_found}
+      chat ->
+        Repo.delete(chat)
     end
   end
 
@@ -318,20 +362,39 @@ defmodule Messenger.Chats do
     case Repo.get_by(Chat, id: chat_id, user_id: user_id) do
       nil -> {:error, :not_found}
       chat ->
-        chat
-        |> Chat.changeset(%{group_id: group_id})
-        |> Repo.update()
+        case chat.group_id do
+          nil ->
+            chat
+            |> Chat.changeset(%{group_id: group_id})
+            |> Repo.update()
+          id ->
+            if id == group_id do
+              {:ok, chat}
+            else
+              Multi.new()
+              |> Multi.update(:chat, Chat.changeset(chat, %{group_id: group_id}))
+              |> Multi.delete_all(:pinned_chat,
+                   from(p in PinnedChat, where: p.chat_id == ^chat_id and p.user_id == ^user_id and p.group_id == ^id)
+                 )
+              |> Repo.transaction()
+            end
+        end
     end
   end
 
   # REMOVE_CHAT_FROM_GROUP
   def remove_chat_from_group(chat_id, user_id) do
     case Repo.get_by(Chat, id: chat_id, user_id: user_id) do
-      nil -> {:error, :not_found}
+      nil ->
+        {:error, :not_found}
       chat ->
-        chat
-        |> Chat.changeset(%{group_id: nil})
-        |> Repo.update()
+        group_id = chat.group_id
+        Multi.new()
+        |> Multi.update(:chat, Chat.changeset(chat, %{group_id: nil}))
+        |> Multi.delete_all(:pinned_chat,
+             from(p in PinnedChat, where: p.chat_id == ^chat_id and p.user_id == ^user_id and p.group_id == ^group_id)
+           )
+        |> Repo.transaction()
     end
   end
 
@@ -468,6 +531,31 @@ defmodule Messenger.Chats do
     |> Repo.insert()
   end
 
+  def get_image_session(image_session_id) do
+    case Repo.get_by(ImageSession, id: image_session_id) do
+      nil ->
+        {:error, :not_found}
+      session ->
+        session
+    end
+  end
+
+  def update_image_session(image_session_id, attrs) do
+    case Repo.get_by(ImageSession, id: image_session_id) do
+      nil ->
+        {:error, :not_found}
+      session ->
+        ImageSession.changeset(session, attrs)
+        |> Repo.update()
+    end
+  end
+
+  def remove_group(group_id, user_id) do
+    case Repo.get_by(Group, id: group_id, user_id: user_id) do
+      nil -> {:error, :not_found}
+      group -> Repo.delete(group)
+    end
+  end
 
 
   def get_summaries(chat_id) do

@@ -1,5 +1,6 @@
 defmodule Messenger.Ai.MessageTranscript do
   alias Messenger.Ai.{Retry, OpenRouterClient}
+  alias Messenger.AiProfiles
   alias Messenger.Chats
   alias Messenger.Accounts
   require Logger
@@ -12,10 +13,12 @@ defmodule Messenger.Ai.MessageTranscript do
   end
 
   defp run(current_user, attrs) do
+    ai_transcript_model = AiProfiles.get_ai_model(attrs.ai_transcript_model_id)
+
     client_attrs = %{
-      "base64" => Map.fetch!(attrs, "base64"),
-      "format" => Map.fetch!(attrs, "format"),
-      "ai_transcript_model" => Map.fetch!(attrs, "ai_transcript_model").openrouter_model_id,
+      "base64" => attrs.base64,
+      "format" => attrs.format,
+      "ai_transcript_model" => ai_transcript_model.openrouter_model_id,
     }
 
     action = Retry.call(fn -> OpenRouterClient.call_transcript(client_attrs) end)
@@ -25,43 +28,24 @@ defmodule Messenger.Ai.MessageTranscript do
         successful_transaction(current_user, attrs, content, usage)
 
       {:error, reason} ->
-        send_error_to_lobby(current_user.id, Map.get(attrs, "chat_id"), reason)
+        send_error_to_lobby(current_user.id, attrs.chat_id, reason)
     end
   end
 
   # Запрос состоялся, удачная транзакция
   defp successful_transaction(current_user, attrs, content, usage) do
-    IO.inspect(attrs, label: "-------------------- ТО ЧТО ПРИШЛО В MESSAGE SENDER")
-    chat_id = Map.get(attrs, "chat_id")
-    temp_id = Map.get(attrs, "temp_id")
-    profile_overrides = Map.get(attrs, "profile_overrides")
-    ai_transcript_model = Map.get(attrs, "ai_transcript_model")
-    is_image_session = Map.get(attrs, "is_image_session", false)
+    chat_id = attrs.chat_id
+    temp_id = attrs.temp_id
 
     Accounts.record_transaction(%{
       "user_id" => current_user.id,
-      "ai_model_id" => ai_transcript_model.id,
+      "ai_model_id" => attrs.ai_transcript_model_id,
       "cost_total" => Map.get(usage, "cost", 0.0),
       "metadata" => %{"action" => "chat_transcript_voice", "chat_id" => chat_id, "time_seconds" => Map.get(usage, "seconds", 0.0)}
     })
 
-    ai_model_id =
-      case Map.get(attrs, "ai_model_id") do
-        nil -> nil
-        id when is_integer(id) -> id
-        id when is_binary(id) -> String.to_integer(id)
-      end
-
-    case Chats.MessageSender.create_message(current_user,
-           %{"text" => content,
-             "chat_id" => chat_id,
-             "temp_id" => temp_id,
-             "is_audio" => true,
-             "ai_model_id" => ai_model_id,
-             "is_image_session" => is_image_session,
-             "profile_overrides" => profile_overrides
-           }) do
-      {:ok, chat, message} ->
+    case Chats.MessageSender.create_message(current_user, %{attrs | text: content, base64: nil, format: nil})do
+      {:ok, %{chat: chat, message: message}} ->
         Phoenix.PubSub.broadcast(
           Messenger.PubSub,
           "user:#{current_user.id}:lobby",
@@ -71,8 +55,8 @@ defmodule Messenger.Ai.MessageTranscript do
             message_id: message.id,
             is_audio: true,
             text: message.content,
-            ai_model_id: to_string(ai_model_id),
-            profile_overrides: profile_overrides
+            ai_model_id: to_string(chat.ai_model_id),
+            profile_overrides: chat.profile_overrides
           }}
         )
 

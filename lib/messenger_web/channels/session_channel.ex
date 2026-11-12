@@ -13,6 +13,7 @@ defmodule MessengerWeb.SessionChannel do
   которая потом обязательно будет ':chats, :messages, :settings etc' и потом можно будет утонуть в сторах
   на фронте, а так как я не силен во фронтенде, мне этой лишней работы не нужно.
   """
+  @impl true
   def join("session:lobby", payload, socket) do
     current_user = socket.assigns.current_user
     # Извлекаем навигационный контекст, присланный фронтендом
@@ -85,6 +86,12 @@ defmodule MessengerWeb.SessionChannel do
     group_id = Map.get(params, "group_id")
     chat = Chats.get_chat(user_id, chat_id)
 
+    serialized_image_session = if chat.is_image_session do
+      Serializer.image_session_serialize(chat.image_session)
+    else
+      %{}
+    end
+
     # Загружаем сообщения активного чата
     active_chat_messages = case Chats.get_chat_messages(chat_id, user_id) do
       nil -> nil
@@ -99,6 +106,7 @@ defmodule MessengerWeb.SessionChannel do
       "messages" => active_chat_messages,
       "has_more_messages" => length(active_chat_messages) >= 15
     })
+    |> Map.put("image_session", serialized_image_session)
   end
 
   # Если: Юзер был внутри конкретного чата, мы восстанавливаем его

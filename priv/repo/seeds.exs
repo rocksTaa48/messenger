@@ -21,7 +21,8 @@ model_deep_seek = Repo.insert!(%AiModel{
   cost_per_1m_output: Decimal.new("0.48"),
   cost_currency: "USD",
   tier: "free",
-  is_default: true
+  is_default: true,
+  type: "llm"
 })
 
 model_qwen_3_8_flash = Repo.insert!(%AiModel{
@@ -35,7 +36,8 @@ model_qwen_3_8_flash = Repo.insert!(%AiModel{
   cost_per_1m_input: Decimal.new("0.15"),
   cost_per_1m_output: Decimal.new("0.48"),
   cost_currency: "USD",
-  tier: "free"
+  tier: "free",
+  type: "llm"
 })
 
 model_mistral_small = Repo.insert!(%AiModel{
@@ -49,7 +51,8 @@ model_mistral_small = Repo.insert!(%AiModel{
   cost_per_1m_input: Decimal.new("0.20"),
   cost_per_1m_output: Decimal.new("0.20"),
   cost_currency: "USD",
-  tier: "free"
+  tier: "free",
+  type: "llm"
 })
 
 model_gemini_flash = Repo.insert!(%AiModel{
@@ -64,6 +67,7 @@ model_gemini_flash = Repo.insert!(%AiModel{
   cost_per_1m_output: Decimal.new("3.78"),
   cost_currency: "USD",
   tier: "free",
+  type: "llm"
 })
 
 # Premium tier
@@ -78,7 +82,8 @@ open_ai_astra = Repo.insert!(%AiModel{
   cost_per_1m_input: Decimal.new("10.00"),
   cost_per_1m_output: Decimal.new("50.00"),
   cost_currency: "USD",
-  tier: "premium"
+  tier: "premium",
+  type: "llm"
 })
 
 model_claude_haiku = Repo.insert!(%AiModel{
@@ -93,7 +98,8 @@ model_claude_haiku = Repo.insert!(%AiModel{
   cost_per_1m_output: Decimal.new("5.0"),
   cost_currency: "USD",
   tier: "premium",
-  is_default: true
+  is_default: true,
+  type: "llm"
 })
 
 model_claude_opus = Repo.insert!(%AiModel{
@@ -107,7 +113,8 @@ model_claude_opus = Repo.insert!(%AiModel{
   cost_per_1m_input: Decimal.new("5.0"),
   cost_per_1m_output: Decimal.new("25.0"),
   cost_currency: "USD",
-  tier: "premium"
+  tier: "premium",
+  type: "llm"
 })
 
 model_chat_gpt = Repo.insert!(%AiModel{
@@ -122,7 +129,7 @@ model_chat_gpt = Repo.insert!(%AiModel{
   cost_per_1m_output: Decimal.new("30.0"),
   cost_currency: "USD",
   tier: "premium",
-  is_default: true
+  type: "llm"
 })
 
 open_ai_whisper = Repo.insert!(%AiModel{
@@ -154,13 +161,26 @@ qwen_image_turbo = Repo.insert!(%AiModel{
   tier: "free"
 })
 
-krea_k3 = Repo.insert!(%AiModel{
-  provider: "Krea",
-  model_name: "Krea: K3 Edit",
-  display_name: "Krea: K3 Edit",
+grok_imagine = Repo.insert!(%AiModel{
+  provider: "Grok",
+  model_name: "xAI: Grok Imagine Image 2.0",
+  display_name: "xAI: Grok Imagine Image 2.0",
+  display_color: "A1B1A5",
+  display_description: "Создание изображений",
+  openrouter_model_id: "x-ai/grok-imagine-image-2.0",
+  is_active: true,
+  type: "image",
+  cost_currency: "USD",
+  tier: "free"
+})
+
+byte_dance = Repo.insert!(%AiModel{
+  provider: "ByteDance",
+  model_name: "ByteDance Seed: Seedream 5.0 Lite",
+  display_name: "ByteDance Seed: Seedream 5.0 Lite",
   display_color: "F4A1A5",
   display_description: "Создание изображений",
-  openrouter_model_id: "krea/k3-edit",
+  openrouter_model_id: "bytedance-seed/seedream-5-0-lite",
   is_active: true,
   type: "image",
   cost_currency: "USD",
@@ -580,11 +600,11 @@ Repo.insert!(%AiProfile{
   name: "orchestrator",
   display_name: "Умный помощник в создании изображений",
   display_description: "Продвинутый ассистент с глубоким пониманием контекста",
-  tier: "premium",
+  tier: "free",
   purpose: "image_sessions",
   is_default: true,
   is_active: true,
-  is_public: false,
+  is_public: true,
   temperature: 0.35,
   top_p: 0.65,
   presence_penalty: 0.45,

@@ -9,7 +9,7 @@
     let isChatSettingsOpen = false;
 
     let pendingAiModelId: string | null = null;
-    let pendingImageAiModelId: string | null = null; // ← НОВОЕ
+    let pendingImageAiModelId: string | null = null;
     let pendingOverrides: {
         temperature: number;
         topP: number;
@@ -18,7 +18,7 @@
     } | null = null;
 
     $: currentAiModelId = pendingAiModelId || $appState.active_chat?.ai_model_id || $appState.ai_model?.id || null;
-    $: currentImageAiModelId = pendingImageAiModelId || $appState.active_chat?.image_ai_model_id || null; // ← НОВОЕ
+    $: currentImageAiModelId = pendingImageAiModelId || $appState.image_session?.ai_model_id || null;
 
     $: currentTemperature = pendingOverrides?.temperature ?? $appState.active_chat?.profile_overrides?.temperature ?? $appState.profile_overrides?.temperature ?? 0.7;
     $: currentTopP = pendingOverrides?.topP ?? $appState.active_chat?.profile_overrides?.top_p ?? $appState.profile_overrides?.top_p ?? 1.0;
@@ -46,13 +46,13 @@
             appState.send("chat:click_update_chat_insight", {
                 chat_id: chatId,
                 ai_model_id: aiModelId,
-                image_ai_model_id: imageAiModelId, // ← НОВОЕ
+                image_ai_model_id: imageAiModelId,
                 profile_overrides: overridesPayload
             });
         } else {
             // Сохраняем как pending для нового чата
             pendingAiModelId = aiModelId;
-            pendingImageAiModelId = imageAiModelId; // ← НОВОЕ
+            pendingImageAiModelId = imageAiModelId;
             pendingOverrides = { temperature, topP, frequencyPenalty, presencePenalty };
         }
         isChatSettingsOpen = false;
@@ -61,7 +61,7 @@
     // =================================== Реактивные данные из стора ==================================================
     $: activeChat = $appState?.active_chat;
     $: messages = activeChat ? [...(activeChat.messages || [])] : [];
-    $: isImageSession = activeChat?.is_image_session === true || appState.nav_context?.params?.is_image_session || false;
+    $: isImageSession = activeChat?.is_image_session === true || $appState.nav_context?.params?.is_image_session || false;
     $: aiModels = $appState?.ai_models || [];
 
     $: isGenerating = messages.some(msg => msg.is_streaming === true) || false;
@@ -298,13 +298,18 @@
             temperature: currentTemperature, topP: currentTopP,
             frequencyPenalty: currentFrequencyPenalty, presencePenalty: currentPresencePenalty
         };
-        appState.sendMessage(text, chatId ? null : pendingAiModelId, overridesToSend);
+        appState.sendMessage(
+            text,
+            chatId ? null : pendingAiModelId,
+            chatId ? null : pendingImageAiModelId,
+            chatId ? null : overridesToSend
+        );
         newMessageText = "";
         if (textareaElement) textareaElement.style.height = 'auto';
         isNearBottom = true;
         pendingOverrides = null;
         pendingAiModelId = null;
-        pendingImageAiModelId = null; // ← Сброс
+        pendingImageAiModelId = null;
         scrollToBottom();
     }
 
@@ -330,12 +335,17 @@
             temperature: currentTemperature, topP: currentTopP,
             frequencyPenalty: currentFrequencyPenalty, presencePenalty: currentPresencePenalty
         };
-        appState.sendVoiceMessage(recordedAudioBlob, chatId ? null : pendingAiModelId, overridesToSend);
+        appState.sendVoiceMessage(
+            recordedAudioBlob,
+            chatId ? null : pendingAiModelId,
+            chatId ? null : pendingImageAiModelId,
+            overridesToSend
+        );
         removeAudio();
         isNearBottom = true;
         pendingOverrides = null;
         pendingAiModelId = null;
-        pendingImageAiModelId = null; // ← Сброс
+        pendingImageAiModelId = null;
         scrollToBottom();
     }
 
@@ -445,14 +455,14 @@
             bind:isOpen={isChatSettingsOpen}
             currentAiModelId={currentAiModelId}
             currentImageAiModelId={currentImageAiModelId}
-    currentFrequencyPenalty={currentFrequencyPenalty}
-    currentPresencePenalty={currentPresencePenalty}
-    currentTopP={currentTopP}
-    currentTemperature={currentTemperature}
-    currentTier={$appState.user?.status || 'free'}
-    isImageSession={isImageSession}
-    on:apply={handleAiModelSelect}
-    on:close={handleClose}
+            currentFrequencyPenalty={currentFrequencyPenalty}
+            currentPresencePenalty={currentPresencePenalty}
+            currentTopP={currentTopP}
+            currentTemperature={currentTemperature}
+            currentTier={$appState.user?.status || 'free'}
+            isImageSession={isImageSession}
+            on:apply={handleAiModelSelect}
+            on:close={handleClose}
     />
 </div>
 

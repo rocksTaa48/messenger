@@ -25,7 +25,7 @@
     screen: 'inside_chat',
     params: {
       chat_id: chat.id.toString(),
-      group_id: $appState.nav_context.params?.group_id || 'All'
+      group_id: $appState.nav_context.params?.group_id || null
     }
   })}
         class="chat flex items-center gap-4 py-2.5 px-3 bg-white/[0.03] border border-white/5

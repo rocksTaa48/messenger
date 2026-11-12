@@ -6,11 +6,11 @@ defmodule Messenger.AiProfiles do
   alias Messenger.AiProfiles.AiModel
 
   # Достаем дефолтный профиль доступный для пользователя по его "status"
-  def get_default_user_ai_profile(user_status) do
+  def get_default_user_ai_profile(user_status, expected_purpose) do
     AiProfile
     |> where(is_active: true, is_public: true, is_default: true)
     |> where(tier: ^user_status)
-    |> where(purpose: "public_chats")
+    |> where(purpose: ^expected_purpose)
     |> preload([:prompt])
     |> Repo.one()
   end
@@ -33,26 +33,17 @@ defmodule Messenger.AiProfiles do
     |> Repo.one()
   end
 
-  # Достаем профиль по умолчанию для оркестрации при генерации изображений
-  def get_orchestrator_profile(user_status) do
-    AiProfile
-    |> where(tier: "premium") #^user_status ЗАГЛУШКА ПОКА!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    |> where(purpose: "image_sessions")
-    |> preload([:prompt])
-    |> Repo.one()
-  end
-
-  # Достаем дефолтную модель доступную для пользователя по его "status"
-  def get_default_user_ai_model(user_status) do
+  # Достаем дефолтную модель доступную для пользователя по его "status" и "expected_type"
+  def get_default_user_ai_model(user_status, expected_type) do
     AiModel
-      |> where(tier: ^user_status, is_default: true, is_active: true, type: "llm")
+      |> where(tier: ^user_status, is_default: true, is_active: true, type: ^expected_type)
       |> Repo.one()
   end
 
-  # Достаем все доступные модели для пользователя по его "status"
-  def get_available_user_ai_models(user_status) do
+  # Достаем все доступные модели для пользователя по его "status" и "expected_type"
+  def get_available_user_ai_models(user_status, expected_type) do
     AiModel
-      |> where(tier: ^user_status, is_active: true)
+      |> where(tier: ^user_status, is_active: true, type: ^expected_type)
       |> Repo.all()
   end
 
