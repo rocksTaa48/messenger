@@ -7,6 +7,6 @@
             roll_size 10MiB
             roll_keep 5
         }
-        format console
+        format json
     }
 }
